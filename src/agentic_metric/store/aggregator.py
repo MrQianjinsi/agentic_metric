@@ -105,6 +105,23 @@ def get_model_breakdown(db: Database, days: int = 30) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def get_today_sessions(db: Database) -> list[dict]:
+    """Get all sessions from today, ordered by started_at descending."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    rows = db.conn.execute(
+        """SELECT session_id, agent_type, project_path, git_branch, model,
+                  message_count, user_turns, input_tokens, output_tokens,
+                  cache_read_tokens, cache_creation_tokens, estimated_cost_usd,
+                  started_at, ended_at, first_prompt
+           FROM sessions
+           WHERE date(started_at) = ?
+           ORDER BY started_at DESC
+        """,
+        (today,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def get_top_projects(db: Database, limit: int = 10) -> list[dict]:
     """Get top projects by message count."""
     rows = db.conn.execute(

@@ -11,9 +11,9 @@ from ..collectors import CollectorRegistry, create_default_registry
 from ..config import DATA_SYNC_INTERVAL, LIVE_REFRESH_INTERVAL
 from ..models import LiveSession
 from ..pricing import estimate_session_cost
-from ..store.aggregator import get_daily_trends
+from ..store.aggregator import get_daily_trends, get_today_overview, get_today_sessions
 from ..store.database import Database
-from .widgets import LiveSummary, StatusBar, fmt_cost, fmt_tokens, ts_to_local
+from .widgets import TodaySummary, fmt_cost, fmt_tokens, ts_to_local
 
 
 class AgenticMetricApp(App):
@@ -35,17 +35,16 @@ class AgenticMetricApp(App):
         self._collectors.sync_all(self._db)
         self._db.commit()
         self._live_sessions: list[LiveSession] = []
+        self._today_sessions: list[dict] = []
 
     # ── Layout ────────────────────────────────────────────────────────
 
     def compose(self) -> ComposeResult:
         yield Header()
-        with TabbedContent("Dashboard", "History"):
-            with TabPane("Dashboard", id="tab-dashboard"):
-                yield StatusBar(id="status-bar")
-                yield LiveSummary(id="live-summary")
+        with TabbedContent("Today", "History"):
+            with TabPane("Today", id="tab-dashboard"):
+                yield TodaySummary(id="today-summary")
                 yield DataTable(id="live-table")
-                yield PlotextPlot(id="today-chart")
             with TabPane("History", id="tab-history"):
                 yield PlotextPlot(id="trend-chart")
                 yield DataTable(id="daily-table")
@@ -61,73 +60,81 @@ class AgenticMetricApp(App):
 
     def _populate_dashboard(self) -> None:
         self._live_sessions = self._collectors.get_live_sessions()
-        self.query_one("#status-bar", StatusBar).active_count = len(self._live_sessions)
-        self.query_one("#live-summary", LiveSummary).set_sessions(self._live_sessions)
-        self._populate_live_table()
-        self._draw_today_chart()
+        self._today_sessions = get_today_sessions(self._db)
+        overview = get_today_overview(self._db)
+        self.query_one("#today-summary", TodaySummary).update_data(
+            overview, len(self._live_sessions)
+        )
+        self._populate_session_table()
 
-    def _populate_live_table(self) -> None:
+    def _get_live_pids(self) -> set[int]:
+        return {s.pid for s in self._live_sessions if s.pid}
+
+    def _get_live_session_ids(self) -> set[str]:
+        return {s.session_id for s in self._live_sessions}
+
+    def _populate_session_table(self) -> None:
         table = self.query_one("#live-table", DataTable)
         table.clear(columns=True)
         table.add_columns(
-            "PID", "Project", "Branch", "Turns",
-            "Output", "Cache Read", "Cache Write",
-            "Cost", "Model", "Prompt",
+            "Status", "Project", "Branch", "Turns",
+            "Output", "Cache R", "Cost",
+            "Model", "Started", "Prompt",
         )
-        for s in self._live_sessions:
-            cost = estimate_session_cost(s)
-            model_short = s.model.split("-20")[0] if s.model else ""
-            project_short = s.project_path.split("/")[-1] if s.project_path else ""
-            branch = s.git_branch or ""
-            prompt = (s.first_prompt[:28] + "\u2026") if len(s.first_prompt) > 28 else s.first_prompt
 
-            table.add_row(
-                str(s.pid) if s.pid else "",
-                project_short,
-                branch,
-                str(s.user_turns),
-                fmt_tokens(s.output_tokens),
-                fmt_tokens(s.cache_read_tokens),
-                fmt_tokens(s.cache_creation_tokens),
+        live_ids = self._get_live_session_ids()
+        db_ids = {s["session_id"] for s in self._today_sessions}
+
+        # Build rows: active first, then finished (by started_at desc)
+        active_rows: list[tuple] = []
+        finished_rows: list[tuple] = []
+
+        for s in self._today_sessions:
+            sid = s["session_id"]
+            is_active = sid in live_ids
+            status = "[green]●[/]" if is_active else "[dim]○[/]"
+            project = (s["project_path"] or "").rsplit("/", 1)[-1]
+            branch = s["git_branch"] or ""
+            turns = str(s["user_turns"] or 0)
+            output = fmt_tokens(s["output_tokens"] or 0)
+            cache_r = fmt_tokens(s["cache_read_tokens"] or 0)
+            cost = fmt_cost(s["estimated_cost_usd"] or 0)
+            model = (s["model"] or "").split("-20")[0]
+            started = ts_to_local(s["started_at"] or "")
+            prompt_raw = s["first_prompt"] or ""
+            prompt = (prompt_raw[:40] + "…") if len(prompt_raw) > 40 else prompt_raw
+
+            row = (status, project, branch, turns, output, cache_r, cost, model, started, prompt)
+            if is_active:
+                active_rows.append(row)
+            else:
+                finished_rows.append(row)
+
+        # Merge live sessions not yet in DB (just started, not synced)
+        for ls in self._live_sessions:
+            if ls.session_id in db_ids:
+                continue
+            cost = estimate_session_cost(ls)
+            project = ls.project_path.rsplit("/", 1)[-1] if ls.project_path else ""
+            prompt_raw = ls.first_prompt or ""
+            prompt = (prompt_raw[:40] + "…") if len(prompt_raw) > 40 else prompt_raw
+            active_rows.append((
+                "[green]●[/]",
+                project,
+                ls.git_branch or "",
+                str(ls.user_turns),
+                fmt_tokens(ls.output_tokens),
+                fmt_tokens(ls.cache_read_tokens),
                 fmt_cost(cost),
-                model_short,
+                (ls.model or "").split("-20")[0],
+                ts_to_local(ls.started),
                 prompt,
-            )
+            ))
 
-    def _draw_today_chart(self) -> None:
-        """Stacked bar chart of today's tokens by session."""
-        plot_widget = self.query_one("#today-chart", PlotextPlot)
-        plt = plot_widget.plt
-        plt.clear_figure()
-        plt.title("Today's Token Consumption (Running Sessions)")
-
-        if not self._live_sessions:
-            plt.title("Today's Token Consumption \u2014 no active sessions")
-            plot_widget.refresh()
-            return
-
-        names: list[str] = []
-        output_vals: list[float] = []
-        cache_r_vals: list[float] = []
-        cache_w_vals: list[float] = []
-
-        for s in self._live_sessions:
-            proj = s.project_path.split("/")[-1] if s.project_path else s.session_id[:8]
-            label = f"{proj}" if not s.pid else f"{proj}:{s.pid}"
-            names.append(label)
-            output_vals.append(s.output_tokens / 1000)
-            cache_r_vals.append(s.cache_read_tokens / 1000)
-            cache_w_vals.append(s.cache_creation_tokens / 1000)
-
-        xs = list(range(len(names)))
-        plt.stacked_bar(
-            xs,
-            [output_vals, cache_w_vals, cache_r_vals],
-            labels=["Output", "Cache Write", "Cache Read"],
-        )
-        plt.xticks(xs, names)
-        plt.ylabel("K tokens")
-        plot_widget.refresh()
+        for row in active_rows:
+            table.add_row(*row)
+        for row in finished_rows:
+            table.add_row(*row)
 
     # ── History ───────────────────────────────────────────────────────
 
@@ -144,20 +151,31 @@ class AgenticMetricApp(App):
         plt.title("Daily Tokens & Cost (30 days)")
 
         if not trends:
-            plt.title("Daily Trend \u2014 no data")
+            plt.title("Daily Trend — no data")
             plot_widget.refresh()
             return
 
         dates = [t.date[5:] for t in trends]  # MM-DD
-        token_vals = [t.total_tokens / 1000 for t in trends]
+        raw_tokens = [t.total_tokens for t in trends]
         cost_vals = [t.estimated_cost_usd for t in trends]
         xs = list(range(len(dates)))
 
-        plt.plot(xs, token_vals, label="Tokens (K)", marker="braille")
+        max_tok = max(raw_tokens) if raw_tokens else 0
+        if max_tok >= 1_000_000_000:
+            divisor, unit = 1_000_000_000, "B"
+        elif max_tok >= 1_000_000:
+            divisor, unit = 1_000_000, "M"
+        elif max_tok >= 1_000:
+            divisor, unit = 1_000, "K"
+        else:
+            divisor, unit = 1, ""
+
+        token_vals = [t / divisor for t in raw_tokens]
+
+        plt.plot(xs, token_vals, label=f"Tokens ({unit})", marker="braille")
         plt.plot(xs, cost_vals, label="Cost ($)", marker="braille")
         plt.xticks(xs, dates)
         plt.xlabel("Date")
-        plt.ylabel("Value")
         plot_widget.refresh()
 
     def _populate_daily_table(self) -> None:
@@ -188,10 +206,11 @@ class AgenticMetricApp(App):
 
     def _update_live(self, sessions: list[LiveSession]) -> None:
         self._live_sessions = sessions
-        self.query_one("#status-bar", StatusBar).active_count = len(sessions)
-        self.query_one("#live-summary", LiveSummary).set_sessions(sessions)
-        self._populate_live_table()
-        self._draw_today_chart()
+        overview = get_today_overview(self._db)
+        self.query_one("#today-summary", TodaySummary).update_data(
+            overview, len(sessions)
+        )
+        self._populate_session_table()
 
     # ── Auto sync (5 min interval) ────────────────────────────────────
 
@@ -201,9 +220,11 @@ class AgenticMetricApp(App):
     async def _sync_worker(self) -> None:
         self._collectors.sync_all(self._db)
         self._db.commit()
-        self.call_from_thread(self._refresh_history)
+        self.call_from_thread(self._refresh_all)
 
-    def _refresh_history(self) -> None:
+    def _refresh_all(self) -> None:
+        self._today_sessions = get_today_sessions(self._db)
+        self._populate_dashboard()
         self._draw_trend_chart()
         daily_table = self.query_one("#daily-table", DataTable)
         daily_table.clear(columns=True)
@@ -215,7 +236,10 @@ class AgenticMetricApp(App):
         self._collectors.sync_all(self._db)
         self._db.commit()
         self._populate_dashboard()
-        self._refresh_history()
+        self._draw_trend_chart()
+        daily_table = self.query_one("#daily-table", DataTable)
+        daily_table.clear(columns=True)
+        self._populate_daily_table()
         self.notify("Data refreshed")
 
     def on_unmount(self) -> None:

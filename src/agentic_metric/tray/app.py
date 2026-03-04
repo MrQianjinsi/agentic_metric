@@ -32,8 +32,7 @@ import pystray
 from pystray import Menu, MenuItem
 
 from .icon import create_icon
-from ..collectors import create_default_registry
-from ..pricing import estimate_session_cost
+from ..collectors import CollectorRegistry, create_default_registry
 from ..store.database import Database
 from ..store import aggregator
 
@@ -42,21 +41,28 @@ _state = {
     "today_cost": 0.0,
 }
 
+_registry: CollectorRegistry | None = None
+_db: Database | None = None
+
+
+def _get_shared() -> tuple[CollectorRegistry, Database]:
+    global _registry, _db
+    if _registry is None:
+        _registry = create_default_registry()
+    if _db is None:
+        _db = Database()
+    return _registry, _db
+
 
 def _refresh_state() -> None:
     try:
-        registry = create_default_registry()
-        sessions = registry.get_live_sessions()
-        _state["active_agents"] = len(sessions)
-        _state["today_cost"] = sum(estimate_session_cost(s) for s in sessions)
-    except Exception:
-        _state["active_agents"] = 0
-
-    try:
-        db = Database()
+        registry, db = _get_shared()
+        registry.sync_all(db)
+        db.commit()
         overview = aggregator.get_today_overview(db)
-        _state["today_cost"] = max(_state["today_cost"], overview.estimated_cost_usd)
-        db.close()
+        live = registry.get_live_sessions()
+        _state["active_agents"] = len(live)
+        _state["today_cost"] = overview.estimated_cost_usd
     except Exception:
         pass
 
@@ -69,13 +75,6 @@ def _open_tui(*_args) -> None:
 
 
 def _do_sync(icon, _item) -> None:
-    try:
-        db = Database()
-        registry = create_default_registry()
-        registry.sync_all(db)
-        db.close()
-    except Exception:
-        pass
     _refresh_state()
     icon.update_menu()
 

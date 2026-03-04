@@ -9,10 +9,17 @@ from rich.table import Table
 app = typer.Typer(
     name="agentic-metric",
     help="Monitor token usage and costs across AI coding agents.",
-    no_args_is_help=True,
+    invoke_without_command=True,
 )
 
 console = Console()
+
+
+@app.callback(invoke_without_command=True)
+def _default(ctx: typer.Context) -> None:
+    """Launch TUI by default when no command is given."""
+    if ctx.invoked_subcommand is None:
+        tui()
 
 
 @app.command()

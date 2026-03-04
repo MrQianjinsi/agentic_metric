@@ -4,14 +4,8 @@ Screen {
     background: $surface;
 }
 
-#status-bar {
-    height: 1;
-    padding: 0 1;
-    background: $boost;
-}
-
-#live-summary {
-    height: 1;
+#today-summary {
+    height: 3;
     padding: 0 1;
     background: $boost;
 }
@@ -19,11 +13,6 @@ Screen {
 #live-table {
     height: 1fr;
     min-height: 5;
-}
-
-#today-chart {
-    height: 14;
-    min-height: 10;
 }
 
 #trend-chart {

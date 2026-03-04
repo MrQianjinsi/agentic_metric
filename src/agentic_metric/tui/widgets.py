@@ -4,11 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from textual.reactive import reactive
 from textual.widgets import Static
 
-from ..models import LiveSession
-from ..pricing import estimate_session_cost
+from ..models import TodayOverview
 
 
 # ── Formatting helpers ────────────────────────────────────────────────
@@ -36,7 +34,7 @@ def ts_to_local(ts: str) -> str:
         return ""
     try:
         dt = datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone()
-        return dt.strftime("%m-%d %H:%M")
+        return dt.strftime("%H:%M")
     except (ValueError, TypeError):
         return ts[:16]
 
@@ -44,42 +42,46 @@ def ts_to_local(ts: str) -> str:
 # ── Widgets ───────────────────────────────────────────────────────────
 
 
-class StatusBar(Static):
-    """Top-level status indicator showing how many agents are active."""
-
-    active_count: reactive[int] = reactive(0)
-
-    def render(self) -> str:
-        n = self.active_count
-        if n > 0:
-            agents = "agent" if n == 1 else "agents"
-            return f"[green bold]\u25cf[/] [bold]{n}[/] {agents} active"
-        return "[dim]\u25cb[/] [dim]Idle[/]"
-
-
-class LiveSummary(Static):
-    """Aggregate summary bar for all running sessions."""
+class TodaySummary(Static):
+    """3-line top-style summary header showing today's aggregate stats."""
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
-        self._sessions: list[LiveSession] = []
+        self._overview: TodayOverview | None = None
+        self._active_count: int = 0
 
-    def set_sessions(self, sessions: list[LiveSession]) -> None:
-        self._sessions = sessions
+    def update_data(self, overview: TodayOverview, active_count: int) -> None:
+        self._overview = overview
+        self._active_count = active_count
         self.refresh()
 
     def render(self) -> str:
-        ss = self._sessions
-        if not ss:
-            return "[bold]Running Sessions[/]  [dim]None[/]"
+        ov = self._overview
+        if ov is None:
+            return "[dim]Loading...[/]"
 
-        total_turns = sum(s.user_turns for s in ss)
-        total_out = sum(s.output_tokens for s in ss)
-        total_cost = sum(estimate_session_cost(s) for s in ss)
-
-        return (
-            f"[bold]Running[/] [bold green]{len(ss)}[/]  "
-            f"Turns [bold cyan]{total_turns}[/]  "
-            f"Output [bold cyan]{fmt_tokens(total_out)}[/]  "
-            f"Est. Cost [bold yellow]{fmt_cost(total_cost)}[/]"
+        n = self._active_count
+        active_str = (
+            f"[green bold]●[/] [bold]{n}[/] active"
+            if n > 0
+            else "[dim]○[/] [dim]Idle[/]"
         )
+
+        line1 = (
+            f"  {active_str}    "
+            f"Sessions: [bold]{ov.session_count}[/]    "
+            f"Messages: [bold]{ov.message_count}[/]    "
+            f"Turns: [bold]{ov.tool_call_count}[/]"
+        )
+
+        line2 = (
+            f"  Tokens: [bold cyan]{fmt_tokens(ov.total_tokens)}[/] "
+            f"(in: {fmt_tokens(ov.input_tokens)}  "
+            f"out: {fmt_tokens(ov.output_tokens)}  "
+            f"cache_r: {fmt_tokens(ov.cache_read_tokens)}  "
+            f"cache_w: {fmt_tokens(ov.cache_creation_tokens)})"
+        )
+
+        line3 = f"  Cost: [bold yellow]{fmt_cost(ov.estimated_cost_usd)}[/]"
+
+        return f"{line1}\n{line2}\n{line3}"
