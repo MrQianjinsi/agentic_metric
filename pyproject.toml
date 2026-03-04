@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agentic-metric"
+version = "0.1.0"
+description = "Agentic coding metric monitor — multi-agent, TUI, system tray"
+requires-python = ">=3.10"
+dependencies = [
+    "textual>=1.0.0",
+    "textual-plotext>=0.3.0",
+    "rich>=13.0.0",
+    "typer>=0.9.0",
+    "pystray>=0.19.0",
+    "pillow>=9.0.0",
+]
+
+[project.scripts]
+agentic-metric = "agentic_metric.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agentic_metric"]
