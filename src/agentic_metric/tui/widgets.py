@@ -68,8 +68,8 @@ class TodaySummary(Static):
         )
 
         line1 = (
-            f"  {active_str}    "
-            f"Sessions: [bold]{ov.session_count}[/]    "
+            f"  Sessions: [bold]{ov.session_count}[/] "
+            f"({active_str})    "
             f"Messages: [bold]{ov.message_count}[/]    "
             f"Turns: [bold]{ov.tool_call_count}[/]"
         )
@@ -82,6 +82,6 @@ class TodaySummary(Static):
             f"cache_w: {fmt_tokens(ov.cache_creation_tokens)})"
         )
 
-        line3 = f"  Cost: [bold yellow]{fmt_cost(ov.estimated_cost_usd)}[/]"
+        line3 = f"  Cost: [bold yellow]~{fmt_cost(ov.estimated_cost_usd)}[/]"
 
         return f"{line1}\n{line2}\n{line3}"
