@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-本地化的 AI coding agent 指标监控工具。追踪 Claude Code、Cursor、OpenCode、VS Code (Copilot Chat) 等 agent 的 token 用量和成本，提供 TUI 仪表盘和 CLI 命令。
+本地化的 AI coding agent 指标监控工具。追踪 Claude Code、Codex、Cursor、OpenCode、VS Code (Copilot Chat) 等 agent 的 token 用量和成本，提供 TUI 仪表盘和 CLI 命令。
 
 **所有数据完全存储在本地，使用过程不会联网。** 工具仅读取本机的 agent 数据文件（如 `~/.claude/`）和进程信息，不发送任何数据到外部服务器。
 

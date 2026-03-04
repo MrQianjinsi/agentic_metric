@@ -6,13 +6,36 @@ build-backend = "hatchling.build"
 name = "agentic-metric"
 version = "0.1.0"
 description = "Agentic coding metric monitor — multi-agent, TUI, CLI"
+readme = "README.md"
+license = "MIT"
 requires-python = ">=3.10"
+authors = [
+    { name = "MrQianjinsi", email = "mrqianjinsi@gmail.com" },
+]
+keywords = ["ai", "coding-agent", "metrics", "tui", "claude-code", "cursor", "codex"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Quality Assurance",
+]
 dependencies = [
     "textual>=1.0.0",
     "textual-plotext>=0.3.0",
     "rich>=13.0.0",
     "typer>=0.9.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/MrQianjinsi/agentic_metric"
+Repository = "https://github.com/MrQianjinsi/agentic_metric"
+Issues = "https://github.com/MrQianjinsi/agentic_metric/issues"
 
 [project.scripts]
 agentic-metric = "agentic_metric.cli:app"

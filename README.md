@@ -2,7 +2,7 @@
 
 [中文文档](README-CN.md)
 
-A local-only monitoring tool for AI coding agents. Track token usage and costs across Claude Code, Cursor, OpenCode, VS Code (Copilot Chat), and more — with a TUI dashboard and CLI.
+A local-only monitoring tool for AI coding agents. Track token usage and costs across Claude Code, Codex, Cursor, OpenCode, VS Code (Copilot Chat), and more — with a TUI dashboard and CLI.
 
 **All data stays on your machine. No network requests, no telemetry, no data leaves your computer.** The tool only reads local agent data files (e.g. `~/.claude/`) and process info.
 
