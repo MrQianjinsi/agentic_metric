@@ -185,6 +185,42 @@ def history(
     console.print(table)
 
 
+def _fmt_tokens(n: int) -> str:
+    """Format token count for compact display: 1234 -> 1.2K, 1234567 -> 1.2M."""
+    if n >= 1_000_000_000:
+        return f"{n / 1_000_000_000:.1f}B"
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    if n >= 1_000:
+        return f"{n / 1_000:.1f}K"
+    return str(n)
+
+
+@app.command()
+def bar() -> None:
+    """Print a one-line summary for status bars (i3blocks, waybar, etc.)."""
+    import sys
+    from .store.database import Database
+    from .store import aggregator
+
+    try:
+        db = Database()
+        overview = aggregator.get_today_overview(db)
+        db.close()
+    except Exception:
+        print("AM: --")
+        sys.exit(0)
+
+    all_tokens = (overview.input_tokens + overview.output_tokens
+                   + overview.cache_read_tokens + overview.cache_creation_tokens)
+    tokens = _fmt_tokens(all_tokens)
+    cost = f"${overview.estimated_cost_usd:.2f}"
+    # full_text
+    print(f"AM: {cost} | {tokens}")
+    # short_text
+    print(f"AM: {cost}")
+
+
 @app.command()
 def sync() -> None:
     """Force sync all collectors to the database."""
