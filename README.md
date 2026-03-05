@@ -4,6 +4,8 @@
 
 A local-only monitoring tool for AI coding agents. Track token usage and costs across Claude Code, Codex, Cursor, OpenCode, VS Code (Copilot Chat), and more — with a TUI dashboard and CLI.
 
+**Supported platforms: Linux and macOS.**
+
 **All data stays on your machine. No network requests, no telemetry, no data leaves your computer.** The tool only reads local agent data files (e.g. `~/.claude/`) and process info.
 
 ## Features
@@ -17,20 +19,27 @@ A local-only monitoring tool for AI coding agents. Track token usage and costs a
 
 ## Data Sources
 
+Paths differ by platform. `$CONFIG` and `$DATA` refer to:
+
+| | Linux | macOS |
+|--|-------|-------|
+| `$CONFIG` | `~/.config` | `~/Library/Application Support` |
+| `$DATA` | `~/.local/share` | `~/Library/Application Support` |
+
 | Agent | Path | Data |
 |-------|------|------|
 | Claude Code | `~/.claude/projects/` | JSONL sessions, token usage, model, branch |
 | Claude Code | `~/.claude/stats-cache.json` | Daily activity stats |
-| Cursor | `~/.config/Cursor/User/globalStorage/state.vscdb` | Composer sessions, token usage, model |
+| Cursor | `$CONFIG/Cursor/User/globalStorage/state.vscdb` | Composer sessions, token usage, model |
 | Cursor | Process detection | Running status, working directory |
 | Codex | `~/.codex/sessions/` | JSONL sessions, token usage, model |
-| VS Code | `~/.config/Code/User/workspaceStorage/*/chatSessions/` | Chat sessions (JSON + JSONL), token usage (JSONL only), model |
-| VS Code | `~/.config/Code/User/globalStorage/emptyWindowChatSessions/` | Empty-window chat sessions |
+| VS Code | `$CONFIG/Code/User/workspaceStorage/*/chatSessions/` | Chat sessions (JSON + JSONL), token usage (JSONL only), model |
+| VS Code | `$CONFIG/Code/User/globalStorage/emptyWindowChatSessions/` | Chat sessions without a project open |
 | VS Code | Process detection | Running status, working directory |
-| OpenCode | `~/.local/share/opencode/opencode.db` | SQLite sessions, messages, token usage, model |
+| OpenCode | `$DATA/opencode/opencode.db` | SQLite sessions, messages, token usage, model |
 | OpenCode | Process detection | Running status, active session matching |
 
-All aggregated data is stored locally in `~/.local/share/agentic_metric/data.db` (SQLite).
+All aggregated data is stored locally in `$DATA/agentic_metric/data.db` (SQLite).
 
 ## Installation
 
@@ -120,4 +129,4 @@ Different agents expose different levels of local data. Here's what's available 
 - **Fully offline** — no network requests, no data sent anywhere
 - **Read-only** — never modifies agent config or data files
 - All stats stored in a local SQLite database
-- Delete `~/.local/share/agentic_metric/` at any time to remove all data
+- Delete the data directory at any time to remove all data (`~/.local/share/agentic_metric/` on Linux, `~/Library/Application Support/agentic_metric/` on macOS)

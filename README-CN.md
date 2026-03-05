@@ -4,6 +4,8 @@
 
 本地化的 AI coding agent 指标监控工具。追踪 Claude Code、Codex、Cursor、OpenCode、VS Code (Copilot Chat) 等 agent 的 token 用量和成本，提供 TUI 仪表盘和 CLI 命令。
 
+**支持平台：Linux 和 macOS。**
+
 **所有数据完全存储在本地，使用过程不会联网。** 工具仅读取本机的 agent 数据文件（如 `~/.claude/`）和进程信息，不发送任何数据到外部服务器。
 
 ## 功能
@@ -17,20 +19,27 @@
 
 ## 数据来源
 
+数据路径因平台而异，下表中 `$CONFIG` 和 `$DATA` 含义如下：
+
+| | Linux | macOS |
+|--|-------|-------|
+| `$CONFIG` | `~/.config` | `~/Library/Application Support` |
+| `$DATA` | `~/.local/share` | `~/Library/Application Support` |
+
 | Agent | 数据路径 | 采集内容 |
 |-------|---------|---------|
 | Claude Code | `~/.claude/projects/` | JSONL 会话、token 用量、模型、分支 |
 | Claude Code | `~/.claude/stats-cache.json` | 每日活动统计 |
-| Cursor | `~/.config/Cursor/User/globalStorage/state.vscdb` | Composer 会话、token 用量、模型 |
+| Cursor | `$CONFIG/Cursor/User/globalStorage/state.vscdb` | Composer 会话、token 用量、模型 |
 | Cursor | 进程检测 | 运行状态、工作目录 |
 | Codex | `~/.codex/sessions/` | JSONL 会话、token 用量、模型 |
-| VS Code | `~/.config/Code/User/workspaceStorage/*/chatSessions/` | 聊天会话（JSON + JSONL）、token 用量（仅 JSONL）、模型 |
-| VS Code | `~/.config/Code/User/globalStorage/emptyWindowChatSessions/` | 空窗口聊天会话 |
+| VS Code | `$CONFIG/Code/User/workspaceStorage/*/chatSessions/` | 聊天会话（JSON + JSONL）、token 用量（仅 JSONL）、模型 |
+| VS Code | `$CONFIG/Code/User/globalStorage/emptyWindowChatSessions/` | 未打开项目时的聊天会话 |
 | VS Code | 进程检测 | 运行状态、工作目录 |
-| OpenCode | `~/.local/share/opencode/opencode.db` | SQLite 会话、消息、token 用量、模型 |
+| OpenCode | `$DATA/opencode/opencode.db` | SQLite 会话、消息、token 用量、模型 |
 | OpenCode | 进程检测 | 运行状态、活跃会话匹配 |
 
-所有数据汇总存储在 `~/.local/share/agentic_metric/data.db`（SQLite）。
+所有数据汇总存储在 `$DATA/agentic_metric/data.db`（SQLite）。
 
 ## 安装
 
@@ -120,4 +129,4 @@ set updatetime=60000          " 空闲 60 秒后触发 CursorHold
 - 不联网，不发送任何数据
 - 不修改 agent 的配置或数据文件（只读）
 - 所有统计数据存储在本地 SQLite 数据库
-- 可随时删除 `~/.local/share/agentic_metric/` 清除所有数据
+- 可随时删除数据目录清除所有数据（Linux: `~/.local/share/agentic_metric/`，macOS: `~/Library/Application Support/agentic_metric/`）
