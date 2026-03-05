@@ -27,32 +27,6 @@ CREATE TABLE IF NOT EXISTS sessions (
     summary TEXT DEFAULT ''
 );
 
-CREATE TABLE IF NOT EXISTS model_daily_usage (
-    date TEXT NOT NULL,
-    model TEXT NOT NULL,
-    agent_type TEXT NOT NULL,
-    input_tokens INTEGER DEFAULT 0,
-    output_tokens INTEGER DEFAULT 0,
-    cache_read_tokens INTEGER DEFAULT 0,
-    cache_creation_tokens INTEGER DEFAULT 0,
-    estimated_cost_usd REAL DEFAULT 0,
-    PRIMARY KEY (date, model, agent_type)
-);
-
-CREATE TABLE IF NOT EXISTS daily_stats (
-    date TEXT NOT NULL,
-    agent_type TEXT NOT NULL,
-    session_count INTEGER DEFAULT 0,
-    message_count INTEGER DEFAULT 0,
-    tool_call_count INTEGER DEFAULT 0,
-    input_tokens INTEGER DEFAULT 0,
-    output_tokens INTEGER DEFAULT 0,
-    cache_read_tokens INTEGER DEFAULT 0,
-    cache_creation_tokens INTEGER DEFAULT 0,
-    estimated_cost_usd REAL DEFAULT 0,
-    PRIMARY KEY (date, agent_type)
-);
-
 CREATE TABLE IF NOT EXISTS sync_state (
     key TEXT PRIMARY KEY,
     value TEXT
@@ -152,77 +126,6 @@ class Database:
                 message_count, user_turns, input_tokens, output_tokens,
                 cache_read_tokens, cache_creation_tokens, estimated_cost_usd,
                 started_at, ended_at, first_prompt, last_prompt, summary,
-            ),
-        )
-
-    # ── Daily stats CRUD ──────────────────────────────────────────
-
-    def upsert_daily_stats(
-        self,
-        date: str,
-        agent_type: str,
-        *,
-        session_count: int = 0,
-        message_count: int = 0,
-        tool_call_count: int = 0,
-        input_tokens: int = 0,
-        output_tokens: int = 0,
-        cache_read_tokens: int = 0,
-        cache_creation_tokens: int = 0,
-        estimated_cost_usd: float = 0.0,
-    ) -> None:
-        self._conn.execute(
-            """INSERT INTO daily_stats
-                   (date, agent_type, session_count, message_count, tool_call_count,
-                    input_tokens, output_tokens, cache_read_tokens,
-                    cache_creation_tokens, estimated_cost_usd)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(date, agent_type) DO UPDATE SET
-                   session_count = excluded.session_count,
-                   message_count = excluded.message_count,
-                   tool_call_count = excluded.tool_call_count,
-                   input_tokens = excluded.input_tokens,
-                   output_tokens = excluded.output_tokens,
-                   cache_read_tokens = excluded.cache_read_tokens,
-                   cache_creation_tokens = excluded.cache_creation_tokens,
-                   estimated_cost_usd = excluded.estimated_cost_usd
-            """,
-            (
-                date, agent_type, session_count, message_count, tool_call_count,
-                input_tokens, output_tokens, cache_read_tokens,
-                cache_creation_tokens, estimated_cost_usd,
-            ),
-        )
-
-    # ── Model daily usage CRUD ────────────────────────────────────
-
-    def upsert_model_daily_usage(
-        self,
-        date: str,
-        model: str,
-        agent_type: str,
-        *,
-        input_tokens: int = 0,
-        output_tokens: int = 0,
-        cache_read_tokens: int = 0,
-        cache_creation_tokens: int = 0,
-        estimated_cost_usd: float = 0.0,
-    ) -> None:
-        self._conn.execute(
-            """INSERT INTO model_daily_usage
-                   (date, model, agent_type, input_tokens, output_tokens,
-                    cache_read_tokens, cache_creation_tokens, estimated_cost_usd)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(date, model, agent_type) DO UPDATE SET
-                   input_tokens = excluded.input_tokens,
-                   output_tokens = excluded.output_tokens,
-                   cache_read_tokens = excluded.cache_read_tokens,
-                   cache_creation_tokens = excluded.cache_creation_tokens,
-                   estimated_cost_usd = excluded.estimated_cost_usd
-            """,
-            (
-                date, model, agent_type, input_tokens, output_tokens,
-                cache_read_tokens, cache_creation_tokens, estimated_cost_usd,
             ),
         )
 

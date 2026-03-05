@@ -6,7 +6,7 @@ import json
 import re
 from pathlib import Path
 
-from ..config import PROJECTS_DIR, STATS_CACHE
+from ..config import PROJECTS_DIR
 from ..models import LiveSession
 from ..pricing import estimate_cost
 from . import BaseCollector
@@ -323,92 +323,9 @@ class ClaudeCodeCollector(BaseCollector):
         2. ``sessions-index.json`` -- session metadata (per project)
         3. ``.jsonl`` files -- per-session token data (incremental via sync_state)
         """
-        self._sync_stats_cache(db)
         self._sync_sessions_index(db)
         self._sync_jsonl_tokens(db)
-        self._derive_daily_stats_from_sessions(db)
         db.commit()
-
-    # ── stats-cache.json ─────────────────────────────────────────
-
-    def _sync_stats_cache(self, db) -> None:
-        """Parse ~/.claude/stats-cache.json for daily stats and model usage."""
-        if not STATS_CACHE.exists():
-            return
-
-        try:
-            data = json.loads(STATS_CACHE.read_text())
-        except (json.JSONDecodeError, OSError):
-            return
-
-        # --- daily_stats ---
-        # Build date -> token_count from dailyModelTokens
-        daily_tokens: dict[str, int] = {}
-        for entry in data.get("dailyModelTokens", []):
-            total = sum(entry.get("tokensByModel", {}).values())
-            daily_tokens[entry.get("date", "")] = total
-
-        for entry in data.get("dailyActivity", []):
-            date = entry.get("date", "")
-            if not date:
-                continue
-            token_count = daily_tokens.get(date, 0)
-            db.upsert_daily_stats(
-                date,
-                self.agent_type,
-                session_count=entry.get("sessionCount", 0),
-                message_count=entry.get("messageCount", 0),
-                tool_call_count=entry.get("toolCallCount", 0),
-                input_tokens=token_count,
-                output_tokens=0,
-                cache_read_tokens=0,
-                cache_creation_tokens=0,
-                estimated_cost_usd=0.0,
-            )
-
-        # --- model_daily_usage ---
-        # dailyModelTokens gives per-date, per-model breakdowns
-        for entry in data.get("dailyModelTokens", []):
-            date = entry.get("date", "")
-            if not date:
-                continue
-            for model, tokens in entry.get("tokensByModel", {}).items():
-                db.upsert_model_daily_usage(
-                    date,
-                    model,
-                    self.agent_type,
-                    input_tokens=tokens,
-                    output_tokens=0,
-                    cache_read_tokens=0,
-                    cache_creation_tokens=0,
-                    estimated_cost_usd=0.0,
-                )
-
-        # modelUsage gives aggregate per-model data -- store as model_daily_usage
-        # keyed under a synthetic date "all" for lifetime aggregates, or
-        # more usefully, use the detailed per-model usage fields.
-        for model, usage in data.get("modelUsage", {}).items():
-            inp = usage.get("inputTokens", 0)
-            out = usage.get("outputTokens", 0)
-            cr = usage.get("cacheReadInputTokens", 0)
-            cc = usage.get("cacheCreationInputTokens", 0)
-            cost = estimate_cost(
-                model,
-                input_tokens=inp,
-                output_tokens=out,
-                cache_read_tokens=cr,
-                cache_creation_tokens=cc,
-            )
-            db.upsert_model_daily_usage(
-                "all",
-                model,
-                self.agent_type,
-                input_tokens=inp,
-                output_tokens=out,
-                cache_read_tokens=cr,
-                cache_creation_tokens=cc,
-                estimated_cost_usd=cost,
-            )
 
     # ── sessions-index.json ──────────────────────────────────────
 
@@ -522,45 +439,3 @@ class ClaudeCodeCollector(BaseCollector):
 
                 db.set_sync_state(sync_key, str(file_size))
 
-    # ── Derive daily_stats from sessions ──────────────────────────
-
-    def _derive_daily_stats_from_sessions(self, db) -> None:
-        """Aggregate session data into daily_stats for dates with JSONL token data.
-
-        Ensures today and recent dates not yet in stats-cache appear in queries.
-        """
-        rows = db.conn.execute(
-            """SELECT
-                   substr(started_at, 1, 10) AS date,
-                   COUNT(*) AS session_count,
-                   SUM(message_count) AS message_count,
-                   SUM(user_turns) AS user_turns,
-                   SUM(input_tokens) AS input_tokens,
-                   SUM(output_tokens) AS output_tokens,
-                   SUM(cache_read_tokens) AS cache_read_tokens,
-                   SUM(cache_creation_tokens) AS cache_creation_tokens,
-                   SUM(estimated_cost_usd) AS estimated_cost_usd
-               FROM sessions
-               WHERE agent_type = ? AND started_at != ''
-                 AND (input_tokens > 0 OR output_tokens > 0)
-               GROUP BY date
-            """,
-            (self.agent_type,),
-        ).fetchall()
-
-        for r in rows:
-            date = r["date"]
-            if not date:
-                continue
-            db.upsert_daily_stats(
-                date,
-                self.agent_type,
-                session_count=r["session_count"] or 0,
-                message_count=r["message_count"] or 0,
-                tool_call_count=r["user_turns"] or 0,
-                input_tokens=r["input_tokens"] or 0,
-                output_tokens=r["output_tokens"] or 0,
-                cache_read_tokens=r["cache_read_tokens"] or 0,
-                cache_creation_tokens=r["cache_creation_tokens"] or 0,
-                estimated_cost_usd=r["estimated_cost_usd"] or 0,
-            )

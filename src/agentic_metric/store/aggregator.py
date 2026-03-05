@@ -13,16 +13,16 @@ def get_today_overview(db: Database) -> TodayOverview:
     today = datetime.now().strftime("%Y-%m-%d")
     rows = db.conn.execute(
         """SELECT agent_type,
-                  SUM(session_count) AS session_count,
+                  COUNT(*) AS session_count,
                   SUM(message_count) AS message_count,
-                  SUM(tool_call_count) AS tool_call_count,
+                  SUM(user_turns) AS user_turns,
                   SUM(input_tokens) AS input_tokens,
                   SUM(output_tokens) AS output_tokens,
                   SUM(cache_read_tokens) AS cache_read_tokens,
                   SUM(cache_creation_tokens) AS cache_creation_tokens,
                   SUM(estimated_cost_usd) AS estimated_cost_usd
-           FROM daily_stats
-           WHERE date = ?
+           FROM sessions
+           WHERE date(started_at) = ?
            GROUP BY agent_type
         """,
         (today,),
@@ -34,7 +34,7 @@ def get_today_overview(db: Database) -> TodayOverview:
         at = r["agent_type"]
         overview.session_count += r["session_count"] or 0
         overview.message_count += r["message_count"] or 0
-        overview.tool_call_count += r["tool_call_count"] or 0
+        overview.tool_call_count += r["user_turns"] or 0
         overview.input_tokens += r["input_tokens"] or 0
         overview.output_tokens += r["output_tokens"] or 0
         overview.cache_read_tokens += r["cache_read_tokens"] or 0
@@ -54,17 +54,17 @@ def get_daily_trends(db: Database, days: int = 30) -> list[DailyTrend]:
     """Get daily aggregated stats for the last N days."""
     cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
     rows = db.conn.execute(
-        """SELECT date,
-                  SUM(session_count) AS session_count,
+        """SELECT substr(started_at, 1, 10) AS date,
+                  COUNT(*) AS session_count,
                   SUM(message_count) AS message_count,
                   SUM(input_tokens) AS input_tokens,
                   SUM(output_tokens) AS output_tokens,
                   SUM(cache_read_tokens) AS cache_read_tokens,
                   SUM(cache_creation_tokens) AS cache_creation_tokens,
                   SUM(estimated_cost_usd) AS estimated_cost_usd
-           FROM daily_stats
-           WHERE date >= ?
-           GROUP BY date
+           FROM sessions
+           WHERE substr(started_at, 1, 10) >= ?
+           GROUP BY substr(started_at, 1, 10)
            ORDER BY date
         """,
         (cutoff,),
@@ -95,8 +95,8 @@ def get_model_breakdown(db: Database, days: int = 30) -> list[dict]:
                   SUM(cache_read_tokens) AS cache_read_tokens,
                   SUM(cache_creation_tokens) AS cache_creation_tokens,
                   SUM(estimated_cost_usd) AS estimated_cost_usd
-           FROM model_daily_usage
-           WHERE date >= ?
+           FROM sessions
+           WHERE substr(started_at, 1, 10) >= ? AND model != ''
            GROUP BY model
            ORDER BY estimated_cost_usd DESC
         """,

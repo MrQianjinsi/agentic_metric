@@ -62,10 +62,11 @@ class AgenticMetricApp(App):
         self._live_sessions = self._collectors.get_live_sessions()
         self._today_sessions = get_today_sessions(self._db)
         overview = get_today_overview(self._db)
+        overview.session_count += self._count_live_only()
+        self._populate_session_table()
         self.query_one("#today-summary", TodaySummary).update_data(
             overview, self._count_active()
         )
-        self._populate_session_table()
 
     def _get_live_pids(self) -> set[int]:
         return {s.pid for s in self._live_sessions if s.pid}
@@ -79,6 +80,14 @@ class AgenticMetricApp(App):
         return sum(
             1 for s in self._live_sessions
             if s.session_id in db_ids or s.user_turns > 0 or s.output_tokens > 0
+        )
+
+    def _count_live_only(self) -> int:
+        """Count live sessions with data that are not yet in the DB."""
+        db_ids = {s["session_id"] for s in self._today_sessions}
+        return sum(
+            1 for s in self._live_sessions
+            if s.session_id not in db_ids and (s.user_turns > 0 or s.output_tokens > 0)
         )
 
     def _populate_session_table(self) -> None:
@@ -246,10 +255,11 @@ class AgenticMetricApp(App):
     def _update_live(self, sessions: list[LiveSession]) -> None:
         self._live_sessions = sessions
         overview = get_today_overview(self._db)
+        overview.session_count += self._count_live_only()
+        self._populate_session_table()
         self.query_one("#today-summary", TodaySummary).update_data(
             overview, self._count_active()
         )
-        self._populate_session_table()
 
     # ── Auto sync (5 min interval) ────────────────────────────────────
 

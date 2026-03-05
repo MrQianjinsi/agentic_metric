@@ -159,7 +159,6 @@ class OpenCodeCollector(BaseCollector):
             return
 
         self._sync_sessions(db)
-        self._derive_daily_stats_from_sessions(db)
         db.commit()
         db.set_sync_state("opencode_db_mtime", mtime)
 
@@ -270,9 +269,6 @@ class OpenCodeCollector(BaseCollector):
                 sp["first"] = text[:80]
             sp["last"] = text[:80]
 
-        # Per-model-per-date accumulators for model_daily_usage
-        model_daily: dict[tuple[str, str], list[float]] = {}
-
         for sess in sessions:
             sid = sess["id"]
             session_id = f"opencode-{sid}"
@@ -323,66 +319,3 @@ class OpenCodeCollector(BaseCollector):
                 summary=title,
             )
 
-            # Accumulate model daily usage
-            if model and started_at:
-                date_str = started_at[:10]
-                key = (date_str, model)
-                acc = model_daily.get(key)
-                if acc is None:
-                    acc = [0.0, 0.0, 0.0, 0.0, 0.0]
-                    model_daily[key] = acc
-                acc[0] += input_tokens
-                acc[1] += output_tokens
-                acc[2] += cache_read
-                acc[3] += cache_write
-                acc[4] += cost
-
-        # Upsert model daily usage
-        for (date_str, model), acc in model_daily.items():
-            db.upsert_model_daily_usage(
-                date_str,
-                model,
-                self.agent_type,
-                input_tokens=int(acc[0]),
-                output_tokens=int(acc[1]),
-                cache_read_tokens=int(acc[2]),
-                cache_creation_tokens=int(acc[3]),
-                estimated_cost_usd=acc[4],
-            )
-
-    def _derive_daily_stats_from_sessions(self, db) -> None:
-        """Aggregate session data into daily_stats."""
-        rows = db.conn.execute(
-            """SELECT
-                   substr(started_at, 1, 10) AS date,
-                   COUNT(*) AS session_count,
-                   SUM(message_count) AS message_count,
-                   SUM(user_turns) AS user_turns,
-                   SUM(input_tokens) AS input_tokens,
-                   SUM(output_tokens) AS output_tokens,
-                   SUM(cache_read_tokens) AS cache_read_tokens,
-                   SUM(cache_creation_tokens) AS cache_creation_tokens,
-                   SUM(estimated_cost_usd) AS estimated_cost_usd
-               FROM sessions
-               WHERE agent_type = ? AND started_at != ''
-               GROUP BY date
-            """,
-            (self.agent_type,),
-        ).fetchall()
-
-        for r in rows:
-            d = r["date"]
-            if not d:
-                continue
-            db.upsert_daily_stats(
-                d,
-                self.agent_type,
-                session_count=r["session_count"] or 0,
-                message_count=r["message_count"] or 0,
-                tool_call_count=r["user_turns"] or 0,
-                input_tokens=r["input_tokens"] or 0,
-                output_tokens=r["output_tokens"] or 0,
-                cache_read_tokens=r["cache_read_tokens"] or 0,
-                cache_creation_tokens=r["cache_creation_tokens"] or 0,
-                estimated_cost_usd=r["estimated_cost_usd"] or 0,
-            )

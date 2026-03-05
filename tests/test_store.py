@@ -1,8 +1,7 @@
 """Tests for store module."""
 
-import sqlite3
 import tempfile
-from pathlib import Path
+from datetime import datetime
 
 from agentic_metric.store.database import Database
 from agentic_metric.store.aggregator import get_today_overview, get_daily_trends
@@ -22,8 +21,6 @@ def test_database_creation():
     ).fetchall()
     names = {r["name"] for r in tables}
     assert "sessions" in names
-    assert "daily_stats" in names
-    assert "model_daily_usage" in names
     assert "sync_state" in names
     db.close()
 
@@ -51,19 +48,6 @@ def test_upsert_session():
     db.close()
 
 
-def test_upsert_daily_stats():
-    db = _make_db()
-    db.upsert_daily_stats("2025-01-01", "claude_code", session_count=5, message_count=50)
-    db.commit()
-
-    row = db.conn.execute(
-        "SELECT * FROM daily_stats WHERE date = '2025-01-01' AND agent_type = 'claude_code'"
-    ).fetchone()
-    assert row["session_count"] == 5
-    assert row["message_count"] == 50
-    db.close()
-
-
 def test_sync_state():
     db = _make_db()
     assert db.get_sync_state("test_key") is None
@@ -82,14 +66,55 @@ def test_today_overview_empty():
     db.close()
 
 
+def test_today_overview_from_sessions():
+    db = _make_db()
+    today = datetime.now().strftime("%Y-%m-%d")
+    db.upsert_session(
+        "s1", "claude_code",
+        started_at=f"{today}T10:00:00",
+        input_tokens=1000, output_tokens=500, message_count=10,
+    )
+    db.upsert_session(
+        "s2", "cursor",
+        started_at=f"{today}T11:00:00",
+        input_tokens=2000, output_tokens=1000, message_count=20,
+    )
+    db.commit()
+
+    overview = get_today_overview(db)
+    assert overview.session_count == 2
+    assert overview.input_tokens == 3000
+    assert overview.output_tokens == 1500
+    assert overview.message_count == 30
+    assert len(overview.by_agent) == 2
+    db.close()
+
+
 def test_daily_trends():
     db = _make_db()
-    db.upsert_daily_stats("2025-01-01", "claude_code", session_count=3, input_tokens=10000)
-    db.upsert_daily_stats("2025-01-02", "claude_code", session_count=5, input_tokens=20000)
+    db.upsert_session(
+        "s1", "claude_code",
+        started_at="2025-01-01T10:00:00",
+        input_tokens=10000, output_tokens=5000, message_count=10,
+    )
+    db.upsert_session(
+        "s2", "claude_code",
+        started_at="2025-01-02T10:00:00",
+        input_tokens=20000, output_tokens=10000, message_count=20,
+    )
+    db.upsert_session(
+        "s3", "cursor",
+        started_at="2025-01-02T11:00:00",
+        input_tokens=5000, output_tokens=2000, message_count=5,
+    )
     db.commit()
 
     trends = get_daily_trends(db, days=365 * 10)
     assert len(trends) == 2
     assert trends[0].date == "2025-01-01"
-    assert trends[1].input_tokens == 20000
+    assert trends[0].session_count == 1
+    assert trends[0].input_tokens == 10000
+    assert trends[1].date == "2025-01-02"
+    assert trends[1].session_count == 2
+    assert trends[1].input_tokens == 25000
     db.close()

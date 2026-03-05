@@ -282,9 +282,6 @@ class VscodeCollector(BaseCollector):
         if not session_files:
             return
 
-        model_daily: dict[tuple[str, str], list[float]] = {}
-        synced_any = False
-
         for file_path, project_path in session_files:
             sync_key = f"vscode_chat_mtime:{file_path}"
             try:
@@ -295,22 +292,8 @@ class VscodeCollector(BaseCollector):
             if prev_mtime == mtime:
                 continue
 
-            if self._sync_session_file(db, file_path, project_path, model_daily):
-                synced_any = True
+            self._sync_session_file(db, file_path, project_path)
             db.set_sync_state(sync_key, mtime)
-
-        if synced_any:
-            self._derive_daily_stats_from_sessions(db)
-
-            for (date_str, model), acc in model_daily.items():
-                db.upsert_model_daily_usage(
-                    date_str,
-                    model,
-                    self.agent_type,
-                    input_tokens=int(acc[0]),
-                    output_tokens=int(acc[1]),
-                    estimated_cost_usd=acc[2],
-                )
 
         db.commit()
 
@@ -319,7 +302,6 @@ class VscodeCollector(BaseCollector):
         db,
         file_path: Path,
         project_path: str,
-        model_daily: dict[tuple[str, str], list[float]],
     ) -> bool:
         """Parse a chat session file (.json or .jsonl) and upsert."""
         if file_path.suffix == ".jsonl":
@@ -332,7 +314,7 @@ class VscodeCollector(BaseCollector):
 
         if not data:
             return False
-        return self._upsert_session_data(db, data, file_path, project_path, model_daily)
+        return self._upsert_session_data(db, data, file_path, project_path)
 
     def _upsert_session_data(
         self,
@@ -340,7 +322,6 @@ class VscodeCollector(BaseCollector):
         data: dict,
         file_path: Path,
         project_path: str,
-        model_daily: dict[tuple[str, str], list[float]],
     ) -> bool:
         """Extract fields from parsed session data and upsert into DB."""
         requests = data.get("requests", [])
@@ -425,52 +406,4 @@ class VscodeCollector(BaseCollector):
             summary=summary,
         )
 
-        if primary_model and started_at:
-            date_str = started_at[:10]
-            key = (date_str, primary_model)
-            acc = model_daily.get(key)
-            if acc is None:
-                acc = [0.0, 0.0, 0.0]
-                model_daily[key] = acc
-            acc[0] += input_tokens
-            acc[1] += output_tokens
-            acc[2] += cost
-
         return True
-
-    def _derive_daily_stats_from_sessions(self, db) -> None:
-        """Aggregate session data into daily_stats."""
-        rows = db.conn.execute(
-            """SELECT
-                   substr(started_at, 1, 10) AS date,
-                   COUNT(*) AS session_count,
-                   SUM(message_count) AS message_count,
-                   SUM(user_turns) AS user_turns,
-                   SUM(input_tokens) AS input_tokens,
-                   SUM(output_tokens) AS output_tokens,
-                   SUM(cache_read_tokens) AS cache_read_tokens,
-                   SUM(cache_creation_tokens) AS cache_creation_tokens,
-                   SUM(estimated_cost_usd) AS estimated_cost_usd
-               FROM sessions
-               WHERE agent_type = ? AND started_at != ''
-               GROUP BY date
-            """,
-            (self.agent_type,),
-        ).fetchall()
-
-        for r in rows:
-            d = r["date"]
-            if not d:
-                continue
-            db.upsert_daily_stats(
-                d,
-                self.agent_type,
-                session_count=r["session_count"] or 0,
-                message_count=r["message_count"] or 0,
-                tool_call_count=r["user_turns"] or 0,
-                input_tokens=r["input_tokens"] or 0,
-                output_tokens=r["output_tokens"] or 0,
-                cache_read_tokens=r["cache_read_tokens"] or 0,
-                cache_creation_tokens=r["cache_creation_tokens"] or 0,
-                estimated_cost_usd=r["estimated_cost_usd"] or 0,
-            )

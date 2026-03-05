@@ -275,7 +275,6 @@ class CodexCollector(BaseCollector):
     def sync_history(self, db) -> None:
         """Sync Codex session history into the database."""
         self._sync_jsonl_sessions(db)
-        self._derive_daily_stats_from_sessions(db)
         db.commit()
 
     def _sync_jsonl_sessions(self, db) -> None:
@@ -337,40 +336,3 @@ class CodexCollector(BaseCollector):
 
             db.set_sync_state(sync_key, str(file_size))
 
-    def _derive_daily_stats_from_sessions(self, db) -> None:
-        """Aggregate session data into daily_stats."""
-        rows = db.conn.execute(
-            """SELECT
-                   substr(started_at, 1, 10) AS date,
-                   COUNT(*) AS session_count,
-                   SUM(message_count) AS message_count,
-                   SUM(user_turns) AS user_turns,
-                   SUM(input_tokens) AS input_tokens,
-                   SUM(output_tokens) AS output_tokens,
-                   SUM(cache_read_tokens) AS cache_read_tokens,
-                   SUM(cache_creation_tokens) AS cache_creation_tokens,
-                   SUM(estimated_cost_usd) AS estimated_cost_usd
-               FROM sessions
-               WHERE agent_type = ? AND started_at != ''
-                 AND (input_tokens > 0 OR output_tokens > 0)
-               GROUP BY date
-            """,
-            (self.agent_type,),
-        ).fetchall()
-
-        for r in rows:
-            d = r["date"]
-            if not d:
-                continue
-            db.upsert_daily_stats(
-                d,
-                self.agent_type,
-                session_count=r["session_count"] or 0,
-                message_count=r["message_count"] or 0,
-                tool_call_count=r["user_turns"] or 0,
-                input_tokens=r["input_tokens"] or 0,
-                output_tokens=r["output_tokens"] or 0,
-                cache_read_tokens=r["cache_read_tokens"] or 0,
-                cache_creation_tokens=r["cache_creation_tokens"] or 0,
-                estimated_cost_usd=r["estimated_cost_usd"] or 0,
-            )
