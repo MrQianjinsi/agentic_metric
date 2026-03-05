@@ -17,29 +17,26 @@ A local-only monitoring tool for AI coding agents. Track token usage and costs a
 - **TUI dashboard** — Terminal UI with 1-second live refresh, stacked token charts, and trend lines
 - **Multi-agent** — Plugin architecture, supports Claude Code, Codex, OpenCode, Qwen Code, VS Code, extensible
 
-## Data Sources
+## Agent Data Coverage
 
-Paths differ by platform. `$CONFIG` and `$DATA` refer to:
+| Field | Claude Code | Codex | VS Code (Copilot) | OpenCode | Qwen Code |
+|-------|:-----------:|:-----:|:-----------------:|:--------:|:---------:|
+| Session ID | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Project path | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Git branch | ✓ | ✓ | ✗ | ✗ | ✓ |
+| Model | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Input tokens | ✓ | ✓ | ✓¹ | ✓ | ✓ |
+| Output tokens | ✓ | ✓ | ✓¹ | ✓ | ✓ |
+| Cache tokens | ✓ | ✓³ | ✗ | ✓³ | ✓³ |
+| User turns | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Message count | ✓ | ✓ | ✓ | ✓ | ✓ |
+| First/last prompt | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Cost estimation | ✓ | ✓ | ✓¹ | ✓ | ✓ |
+| Live active status | ✓ | ✓ | ✓² | ✓ | ✓ |
 
-| | Linux | macOS |
-|--|-------|-------|
-| `$CONFIG` | `~/.config` | `~/Library/Application Support` |
-| `$DATA` | `~/.local/share` | `~/Library/Application Support` |
-
-| Agent | Path | Data |
-|-------|------|------|
-| Claude Code | `~/.claude/projects/` | JSONL sessions, token usage, model, branch |
-| Claude Code | `~/.claude/stats-cache.json` | Daily activity stats |
-| Codex | `~/.codex/sessions/` | JSONL sessions, token usage, model |
-| VS Code | `$CONFIG/Code/User/workspaceStorage/*/chatSessions/` | Chat sessions (JSON + JSONL), token usage (JSONL only), model |
-| VS Code | `$CONFIG/Code/User/globalStorage/emptyWindowChatSessions/` | Chat sessions without a project open |
-| VS Code | Process detection | Running status, working directory |
-| OpenCode | `$DATA/opencode/opencode.db` | SQLite sessions, messages, token usage, model |
-| OpenCode | Process detection | Running status, active session matching |
-| Qwen Code | `~/.qwen/projects/*/chats/` | JSONL sessions, token usage, model, branch |
-| Qwen Code | Process detection | Running status, working directory |
-
-All aggregated data is stored locally in `$DATA/agentic_metric/data.db` (SQLite).
+> ¹ VS Code legacy JSON sessions (older Copilot versions) do not contain token data; only newer JSONL sessions are supported.
+> ² VS Code live status is process-level only; cannot match to a specific Copilot Chat session.
+> ³ Cache read tokens only; cache write data is not exposed.
 
 ## Installation
 
@@ -96,31 +93,29 @@ set updatetime=60000          " trigger CursorHold after 60s idle
 | `r` | Refresh data |
 | `Tab` | Switch Dashboard / History tab |
 
-## Agent Data Coverage
+## Data Sources
 
-Different agents expose different levels of local data. Here's what's available for each:
+Paths differ by platform. `$CONFIG` and `$DATA` refer to:
 
-| Field | Claude Code | Codex | VS Code (Copilot) | OpenCode | Qwen Code |
-|-------|:-----------:|:-----:|:-----------------:|:--------:|:---------:|
-| Session ID | ✓ JSONL | ✓ JSONL | ✓ sessionId | ✓ session table | ✓ JSONL |
-| Project path | ✓ JSONL | ✓ JSONL | ✓ workspace.json URI | ✓ session.directory (launch cwd) | ✓ JSONL |
-| Git branch | ✓ JSONL | ✓ JSONL | ✗ not stored | ✗ not stored | ✓ JSONL |
-| Model | ✓ JSONL | ✓ JSONL | ✓ result.details (e.g. "Claude Haiku 4.5 • 1x") | ✓ message.modelID | ✓ JSONL (via telemetry) |
-| Input tokens | ✓ per-message | ✓ cumulative | ◐ JSONL format only | ✓ per-message | ✓ per-response (telemetry) |
-| Output tokens | ✓ per-message | ✓ cumulative | ◐ JSONL format only | ✓ per-message (includes reasoning) | ✓ per-response (telemetry) |
-| Cache tokens | ✓ read + write | ✓ read only | ✗ not exposed | ◐ read only (write always 0) | ◐ read only (write not exposed) |
-| User turns | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Message count | ✓ user + assistant (excl. tool_result) | ✓ user + assistant | ✓ turns × 2 | ✓ user + assistant | ✓ user + assistant |
-| First/last prompt | ✓ | ✓ | ✓ message.text | ✓ from part table | ✓ from message.parts |
-| Cost estimation | ✓ | ✓ | ◐ only when tokens available | ◐ estimated only (reported cost always 0) | ✓ (qwen3-coder-plus pricing) |
-| Live active status | ✓ PID + session file match | ✓ PID + session file match | ◐ process-level only | ✓ PID + DB session match | ✓ PID + session file match |
+| | Linux | macOS |
+|--|-------|-------|
+| `$CONFIG` | `~/.config` | `~/Library/Application Support` |
+| `$DATA` | `~/.local/share` | `~/Library/Application Support` |
 
-**Key differences:**
+| Agent | Path | Data |
+|-------|------|------|
+| Claude Code | `~/.claude/projects/` | JSONL sessions, token usage, model, branch |
+| Claude Code | `~/.claude/stats-cache.json` | Daily activity stats |
+| Codex | `~/.codex/sessions/` | JSONL sessions, token usage, model |
+| VS Code | `$CONFIG/Code/User/workspaceStorage/*/chatSessions/` | Chat sessions (JSON + JSONL), token usage (JSONL only), model |
+| VS Code | `$CONFIG/Code/User/globalStorage/emptyWindowChatSessions/` | Chat sessions without a project open |
+| VS Code | Process detection | Running status, working directory |
+| OpenCode | `$DATA/opencode/opencode.db` | SQLite sessions, messages, token usage, model |
+| OpenCode | Process detection | Running status, active session matching |
+| Qwen Code | `~/.qwen/projects/*/chats/` | JSONL sessions, token usage, model, branch |
+| Qwen Code | Process detection | Running status, working directory |
 
-- **Claude Code & Codex** — Each running process maps to a JSONL session file with a unique session ID. This allows precise matching between live processes and DB sessions for accurate active status.
-- **VS Code (Copilot Chat)** — Has two storage formats: legacy JSON (older sessions, no token data) and newer incremental JSONL (with `result.usage` containing `promptTokens`/`completionTokens`). Token usage is only available for sessions stored in JSONL format. Model names are extracted from Copilot's display strings (e.g. "GPT-4o • 1x") and normalized to pricing keys. Workspace paths support local (`file://`), SSH remote (`vscode-remote://ssh-remote+host`), and container (`attached-container+...`) URIs.
-- **OpenCode** — Stores all data in a local SQLite database (`opencode.db`). Token data is per-message with `input`, `output`, `reasoning`, and `cache.read`/`cache.write` fields. Reasoning tokens are counted as output tokens (billed at output rate). The `cost` field in messages is always 0, so all costs are estimated using the pricing table. `cache.write` is also always 0.
-- **Qwen Code** — JSONL layout similar to Claude Code, stored under `~/.qwen/projects/<hashed-path>/chats/`. Token data comes from `system/ui_telemetry` entries (`qwen-code.api_response`) rather than assistant message usage fields. Costs are estimated using qwen3-coder-plus pricing. Qwen Code uses free OAuth by default, so actual costs may be $0.
+All aggregated data is stored locally in `$DATA/agentic_metric/data.db` (SQLite).
 
 ## Unsupported Agents
 
