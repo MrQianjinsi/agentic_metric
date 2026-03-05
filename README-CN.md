@@ -101,7 +101,7 @@ set updatetime=60000          " 空闲 60 秒后触发 CursorHold
 | Output tokens | ✓ 逐条累加 | ✓ 累计值 | ◐ 仅旧版本 | ◐ 仅 JSONL 格式 | ✓ 逐条累加（含 reasoning） |
 | Cache tokens | ✓ 读+写 | ✓ 仅读 | ✗ 不暴露 | ✗ 不暴露 | ◐ 仅读（write 始终为 0） |
 | 用户轮次 | ✓ | ✓ | ✓ | ✓ | ✓ |
-| 消息总数 | ✓ 所有消息 | ✓ 仅 AI 回复 | ✓ 所有消息 | ✓ 轮次 × 2 | ✓ 所有消息 |
+| 消息总数 | ✓ user + assistant（排除 tool_result） | ✓ user + assistant | ✓ 对话 headers | ✓ 轮次 × 2 | ✓ user + assistant |
 | 首条/末条 prompt | ✓ | ✓ | ✓ 从 bubble text 提取 | ✓ message.text | ✓ 从 part 表提取 |
 | 成本估算 | ✓ | ✓ | ◐ 仅在有 token 数据时可估算 | ◐ 仅在有 token 数据时可估算 | ◐ 全部为估算（上报 cost 始终为 0） |
 | 实时活跃状态 | ✓ PID + 会话文件精确匹配 | ✓ PID + 会话文件精确匹配 | ◐ 仅进程级检测（标记最新会话为活跃） | ◐ 仅进程级检测 | ✓ PID + DB 会话匹配 |

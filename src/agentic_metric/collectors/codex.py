@@ -118,6 +118,7 @@ class _SessionAccum:
 
         if msg_type == "user_message":
             self.user_turns += 1
+            self.message_count += 1
             text = payload.get("message", "")
             if isinstance(text, str) and text.strip():
                 clean = text.strip()[:80]

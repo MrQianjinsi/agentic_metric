@@ -117,9 +117,6 @@ class _SessionAccum:
 
         entry_type = entry.get("type", "")
 
-        if entry_type in ("user", "assistant"):
-            self.message_count += 1
-
         if entry_type == "user":
             if not self.git_branch:
                 self.git_branch = entry.get("gitBranch", "")
@@ -132,6 +129,7 @@ class _SessionAccum:
             )
             if not is_tool_result:
                 self.user_turns += 1
+                self.message_count += 1
                 if isinstance(content, str):
                     clean = _extract_prompt(content)
                     if clean:
@@ -140,6 +138,7 @@ class _SessionAccum:
                         self.last_prompt = clean[:80]
 
         elif entry_type == "assistant":
+            self.message_count += 1
             msg = entry.get("message", {})
             usage = msg.get("usage", {}) if isinstance(msg, dict) else {}
             if usage:

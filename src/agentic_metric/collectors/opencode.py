@@ -232,11 +232,12 @@ class OpenCodeCollector(BaseCollector):
                 }
                 session_agg[sid] = agg
 
-            agg["msg_count"] += 1
             role = mr["role"]
             if role == "user":
                 agg["user_turns"] += 1
+                agg["msg_count"] += 1
             elif role == "assistant":
+                agg["msg_count"] += 1
                 model = mr["model"] or ""
                 if model:
                     agg["models"].add(model)

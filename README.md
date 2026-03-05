@@ -101,7 +101,7 @@ Different agents expose different levels of local data. Here's what's available 
 | Output tokens | ✓ per-message | ✓ cumulative | ◐ older versions only | ◐ JSONL format only | ✓ per-message (includes reasoning) |
 | Cache tokens | ✓ read + write | ✓ read only | ✗ not exposed | ✗ not exposed | ◐ read only (write always 0) |
 | User turns | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Message count | ✓ all messages | ✓ AI replies only | ✓ all messages | ✓ turns × 2 | ✓ all messages |
+| Message count | ✓ user + assistant (excl. tool_result) | ✓ user + assistant | ✓ conversation headers | ✓ turns × 2 | ✓ user + assistant |
 | First/last prompt | ✓ | ✓ | ✓ from bubble text | ✓ message.text | ✓ from part table |
 | Cost estimation | ✓ | ✓ | ◐ only when tokens available | ◐ only when tokens available | ◐ estimated only (reported cost always 0) |
 | Live active status | ✓ PID + session file match | ✓ PID + session file match | ◐ process-level only (latest session marked active) | ◐ process-level only | ✓ PID + DB session match |
