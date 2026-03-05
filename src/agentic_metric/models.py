@@ -11,7 +11,7 @@ class LiveSession:
     """A currently running agent session (real-time from JSONL or process)."""
 
     session_id: str
-    agent_type: str  # 'claude_code', 'cursor'
+    agent_type: str  # 'claude_code', 'codex', etc.
     project_path: str
     git_branch: str = ""
     model: str = ""

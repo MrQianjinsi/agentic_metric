@@ -117,7 +117,7 @@ class AgenticMetricApp(App):
             sid = s["session_id"]
             agent = s["agent_type"] or ""
             is_active = sid in live_ids
-            # For process-level collectors (e.g. Cursor): mark latest session active
+            # For process-level collectors (e.g. VS Code): mark latest session active
             if not is_active and agent in live_agent_types and agent not in agent_type_marked:
                 is_active = True
             if is_active:

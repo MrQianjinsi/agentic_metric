@@ -75,7 +75,7 @@ def test_today_overview_from_sessions():
         input_tokens=1000, output_tokens=500, message_count=10,
     )
     db.upsert_session(
-        "s2", "cursor",
+        "s2", "codex",
         started_at=f"{today}T11:00:00",
         input_tokens=2000, output_tokens=1000, message_count=20,
     )
@@ -103,7 +103,7 @@ def test_daily_trends():
         input_tokens=20000, output_tokens=10000, message_count=20,
     )
     db.upsert_session(
-        "s3", "cursor",
+        "s3", "codex",
         started_at="2025-01-02T11:00:00",
         input_tokens=5000, output_tokens=2000, message_count=5,
     )

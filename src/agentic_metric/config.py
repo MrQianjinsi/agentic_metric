@@ -22,14 +22,6 @@ QWEN_PROJECTS_DIR = QWEN_HOME / "projects"
 CODEX_HOME = _HOME / ".codex"
 CODEX_SESSIONS_DIR = CODEX_HOME / "sessions"
 
-# Cursor data paths
-CURSOR_TRACKING_DB = _HOME / ".cursor" / "ai-tracking" / "ai-code-tracking.db"
-CURSOR_STATE_DB = (
-    _APP_SUPPORT / "Cursor" / "User" / "globalStorage" / "state.vscdb"
-    if _IS_MAC
-    else _HOME / ".config" / "Cursor" / "User" / "globalStorage" / "state.vscdb"
-)
-
 # OpenCode data paths
 OPENCODE_DB = (
     _APP_SUPPORT / "opencode" / "opencode.db"

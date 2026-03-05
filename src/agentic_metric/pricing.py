@@ -25,7 +25,6 @@ PRICING: dict[str, tuple[float, float, float, float]] = {
 
 _DEFAULT_PRICING = (5.0, 25.0, 0.50, 6.25)  # fallback to opus pricing
 
-# Cursor model name → our pricing key
 _MODEL_ALIASES: dict[str, str] = {
     "claude-4.5-sonnet-thinking": "claude-sonnet-4-5",
     "claude-4.5-opus-high-thinking": "claude-opus-4-5",
@@ -66,7 +65,7 @@ def normalize_copilot_model(details: str) -> str:
 
 
 def normalize_model(name: str) -> str:
-    """Normalize external model names (e.g. Cursor) to our pricing keys."""
+    """Normalize external model names to our pricing keys."""
     if not name:
         return ""
     return _MODEL_ALIASES.get(name, name)

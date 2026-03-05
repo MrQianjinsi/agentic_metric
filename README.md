@@ -2,7 +2,7 @@
 
 [中文文档](README-CN.md)
 
-A local-only monitoring tool for AI coding agents. Track token usage and costs across Claude Code, Codex, Cursor, OpenCode, Qwen Code, VS Code (Copilot Chat), and more — with a TUI dashboard and CLI.
+A local-only monitoring tool for AI coding agents. Track token usage and costs across Claude Code, Codex, OpenCode, Qwen Code, VS Code (Copilot Chat), and more — with a TUI dashboard and CLI.
 
 **Supported platforms: Linux and macOS.**
 
@@ -15,7 +15,7 @@ A local-only monitoring tool for AI coding agents. Track token usage and costs a
 - **Today overview** — Sessions, token usage, and cost summary for the current day
 - **Historical trends** — 30-day daily token/cost trends
 - **TUI dashboard** — Terminal UI with 1-second live refresh, stacked token charts, and trend lines
-- **Multi-agent** — Plugin architecture, supports Claude Code and Cursor, extensible
+- **Multi-agent** — Plugin architecture, supports Claude Code, Codex, OpenCode, Qwen Code, VS Code, extensible
 
 ## Data Sources
 
@@ -30,8 +30,6 @@ Paths differ by platform. `$CONFIG` and `$DATA` refer to:
 |-------|------|------|
 | Claude Code | `~/.claude/projects/` | JSONL sessions, token usage, model, branch |
 | Claude Code | `~/.claude/stats-cache.json` | Daily activity stats |
-| Cursor | `$CONFIG/Cursor/User/globalStorage/state.vscdb` | Composer sessions, token usage, model |
-| Cursor | Process detection | Running status, working directory |
 | Codex | `~/.codex/sessions/` | JSONL sessions, token usage, model |
 | VS Code | `$CONFIG/Code/User/workspaceStorage/*/chatSessions/` | Chat sessions (JSON + JSONL), token usage (JSONL only), model |
 | VS Code | `$CONFIG/Code/User/globalStorage/emptyWindowChatSessions/` | Chat sessions without a project open |
@@ -102,30 +100,31 @@ set updatetime=60000          " trigger CursorHold after 60s idle
 
 Different agents expose different levels of local data. Here's what's available for each:
 
-| Field | Claude Code | Codex | Cursor | VS Code (Copilot) | OpenCode | Qwen Code |
-|-------|:-----------:|:-----:|:------:|:-----------------:|:--------:|:---------:|
-| Session ID | ✓ JSONL | ✓ JSONL | ✓ composerId | ✓ sessionId | ✓ session table | ✓ JSONL |
-| Project path | ✓ JSONL | ✓ JSONL | ◐ partial (from bubble or conversationState) | ✓ workspace.json URI | ✓ session.directory (launch cwd) | ✓ JSONL |
-| Git branch | ✓ JSONL | ✓ JSONL | ✗ not stored | ✗ not stored | ✗ not stored | ✓ JSONL |
-| Model | ✓ JSONL | ✓ JSONL | ✓ modelConfig / bubble modelInfo | ✓ result.details (e.g. "Claude Haiku 4.5 • 1x") | ✓ message.modelID | ✓ JSONL (via telemetry) |
-| Input tokens | ✓ per-message | ✓ cumulative | ◐ older versions only | ◐ JSONL format only | ✓ per-message | ✓ per-response (telemetry) |
-| Output tokens | ✓ per-message | ✓ cumulative | ◐ older versions only | ◐ JSONL format only | ✓ per-message (includes reasoning) | ✓ per-response (telemetry) |
-| Cache tokens | ✓ read + write | ✓ read only | ✗ not exposed | ✗ not exposed | ◐ read only (write always 0) | ◐ read only (write not exposed) |
-| User turns | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Message count | ✓ user + assistant (excl. tool_result) | ✓ user + assistant | ✓ conversation headers | ✓ turns × 2 | ✓ user + assistant | ✓ user + assistant |
-| First/last prompt | ✓ | ✓ | ✓ from bubble text | ✓ message.text | ✓ from part table | ✓ from message.parts |
-| Cost estimation | ✓ | ✓ | ◐ only when tokens available | ◐ only when tokens available | ◐ estimated only (reported cost always 0) | ✓ (qwen3-coder-plus pricing) |
-| Live active status | ✓ PID + session file match | ✓ PID + session file match | ◐ process-level only (latest session marked active) | ◐ process-level only | ✓ PID + DB session match | ✓ PID + session file match |
+| Field | Claude Code | Codex | VS Code (Copilot) | OpenCode | Qwen Code |
+|-------|:-----------:|:-----:|:-----------------:|:--------:|:---------:|
+| Session ID | ✓ JSONL | ✓ JSONL | ✓ sessionId | ✓ session table | ✓ JSONL |
+| Project path | ✓ JSONL | ✓ JSONL | ✓ workspace.json URI | ✓ session.directory (launch cwd) | ✓ JSONL |
+| Git branch | ✓ JSONL | ✓ JSONL | ✗ not stored | ✗ not stored | ✓ JSONL |
+| Model | ✓ JSONL | ✓ JSONL | ✓ result.details (e.g. "Claude Haiku 4.5 • 1x") | ✓ message.modelID | ✓ JSONL (via telemetry) |
+| Input tokens | ✓ per-message | ✓ cumulative | ◐ JSONL format only | ✓ per-message | ✓ per-response (telemetry) |
+| Output tokens | ✓ per-message | ✓ cumulative | ◐ JSONL format only | ✓ per-message (includes reasoning) | ✓ per-response (telemetry) |
+| Cache tokens | ✓ read + write | ✓ read only | ✗ not exposed | ◐ read only (write always 0) | ◐ read only (write not exposed) |
+| User turns | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Message count | ✓ user + assistant (excl. tool_result) | ✓ user + assistant | ✓ turns × 2 | ✓ user + assistant | ✓ user + assistant |
+| First/last prompt | ✓ | ✓ | ✓ message.text | ✓ from part table | ✓ from message.parts |
+| Cost estimation | ✓ | ✓ | ◐ only when tokens available | ◐ estimated only (reported cost always 0) | ✓ (qwen3-coder-plus pricing) |
+| Live active status | ✓ PID + session file match | ✓ PID + session file match | ◐ process-level only | ✓ PID + DB session match | ✓ PID + session file match |
 
 **Key differences:**
 
 - **Claude Code & Codex** — Each running process maps to a JSONL session file with a unique session ID. This allows precise matching between live processes and DB sessions for accurate active status.
-- **Cursor** — Live detection only sees the process PID, while historical sessions use composer UUIDs from `state.vscdb`. There is no way to link a running Cursor process to a specific composer session, so the most recent session is marked active when the process is running.
-- **Token coverage** — Cursor stored per-bubble `tokenCount` (input/output) in `state.vscdb` in earlier versions (~2025-05 to ~2025-12), but newer versions no longer populate this field — all values are zero. Cursor appears to have moved usage tracking to a server-side system, so local token data is unavailable for recent sessions. Cache token breakdown (read/write) has never been available.
-- **Model name** — Cursor's "default" model setting doesn't record which model was actually used on the backend. These sessions show `default` in the model column.
 - **VS Code (Copilot Chat)** — Has two storage formats: legacy JSON (older sessions, no token data) and newer incremental JSONL (with `result.usage` containing `promptTokens`/`completionTokens`). Token usage is only available for sessions stored in JSONL format. Model names are extracted from Copilot's display strings (e.g. "GPT-4o • 1x") and normalized to pricing keys. Workspace paths support local (`file://`), SSH remote (`vscode-remote://ssh-remote+host`), and container (`attached-container+...`) URIs.
 - **OpenCode** — Stores all data in a local SQLite database (`opencode.db`). Token data is per-message with `input`, `output`, `reasoning`, and `cache.read`/`cache.write` fields. Reasoning tokens are counted as output tokens (billed at output rate). The `cost` field in messages is always 0, so all costs are estimated using the pricing table. `cache.write` is also always 0.
 - **Qwen Code** — JSONL layout similar to Claude Code, stored under `~/.qwen/projects/<hashed-path>/chats/`. Token data comes from `system/ui_telemetry` entries (`qwen-code.api_response`) rather than assistant message usage fields. Costs are estimated using qwen3-coder-plus pricing. Qwen Code uses free OAuth by default, so actual costs may be $0.
+
+## Unsupported Agents
+
+- **Cursor** — Cursor stopped writing token usage data (`tokenCount`) to its local `state.vscdb` database around January 2026 (approximately version 2.0.63+). All `inputTokens`/`outputTokens` values are now zero. Cursor has moved usage tracking to a server-side system. Since this tool is designed to be fully offline with no network requests, there is no way to retrieve Cursor's usage data via network API, so monitoring Cursor usage is not supported.
 
 ## Privacy
 
