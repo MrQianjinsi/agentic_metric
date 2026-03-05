@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agentic-metric"
-version = "0.1.0"
+version = "0.1.1"
 description = "Agentic coding metric monitor — multi-agent, TUI, CLI"
 readme = "README.md"
 license = "MIT"
@@ -33,9 +33,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/MrQianjinsi/agentic_metric"
-Repository = "https://github.com/MrQianjinsi/agentic_metric"
-Issues = "https://github.com/MrQianjinsi/agentic_metric/issues"
+Homepage = "https://github.com/MrQianjinsi/agentic-metric"
+Repository = "https://github.com/MrQianjinsi/agentic-metric"
+Issues = "https://github.com/MrQianjinsi/agentic-metric/issues"
 
 [project.scripts]
 agentic-metric = "agentic_metric.cli:app"
