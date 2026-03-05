@@ -148,6 +148,7 @@ class _SessionAccum:
             project_path=self.project_path,
             git_branch=self.git_branch,
             model=self.model,
+            message_count=self.message_count,
             user_turns=self.user_turns,
             input_tokens=self.input_tokens,
             output_tokens=self.output_tokens,

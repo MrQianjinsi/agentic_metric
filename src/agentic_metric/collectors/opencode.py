@@ -77,9 +77,13 @@ class OpenCodeCollector(BaseCollector):
                 if msg:
                     model = msg["model"] or ""
 
-                # Count user turns
+                # Count user turns and total messages
                 user_turns = src.execute(
                     "SELECT COUNT(*) FROM message WHERE session_id = ? AND json_extract(data, '$.role') = 'user'",
+                    (row["id"],),
+                ).fetchone()[0]
+                message_count = src.execute(
+                    "SELECT COUNT(*) FROM message WHERE session_id = ?",
                     (row["id"],),
                 ).fetchone()[0]
 
@@ -129,6 +133,7 @@ class OpenCodeCollector(BaseCollector):
                         pid=pids[0],
                         project_path=directory,
                         model=model,
+                        message_count=message_count,
                         user_turns=user_turns,
                         input_tokens=input_tokens,
                         output_tokens=output_tokens,

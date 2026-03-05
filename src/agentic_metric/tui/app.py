@@ -62,11 +62,41 @@ class AgenticMetricApp(App):
         self._live_sessions = self._collectors.get_live_sessions()
         self._today_sessions = get_today_sessions(self._db)
         overview = get_today_overview(self._db)
-        overview.session_count += self._count_live_only()
+        self._merge_live_into_overview(overview)
         self._populate_session_table()
         self.query_one("#today-summary", TodaySummary).update_data(
             overview, self._count_active()
         )
+
+    def _merge_live_into_overview(self, overview: TodayOverview) -> None:
+        """Merge live session data into overview so summary matches the table."""
+        db_ids = {s["session_id"] for s in self._today_sessions}
+        db_by_id = {s["session_id"]: s for s in self._today_sessions}
+
+        for ls in self._live_sessions:
+            if ls.session_id in db_ids:
+                # Session exists in DB — add the delta if live data is fresher
+                db_s = db_by_id[ls.session_id]
+                if ls.output_tokens > 0:
+                    overview.message_count += max(0, ls.message_count - (db_s["message_count"] or 0))
+                    overview.tool_call_count += max(0, ls.user_turns - (db_s["user_turns"] or 0))
+                    overview.input_tokens += max(0, ls.input_tokens - (db_s["input_tokens"] or 0))
+                    overview.output_tokens += max(0, ls.output_tokens - (db_s["output_tokens"] or 0))
+                    overview.cache_read_tokens += max(0, ls.cache_read_tokens - (db_s["cache_read_tokens"] or 0))
+                    overview.cache_creation_tokens += max(0, ls.cache_creation_tokens - (db_s["cache_creation_tokens"] or 0))
+                    overview.estimated_cost_usd += max(0, estimate_session_cost(ls) - (db_s["estimated_cost_usd"] or 0))
+            else:
+                # Live-only session not yet in DB
+                if ls.user_turns == 0 and ls.output_tokens == 0:
+                    continue
+                overview.session_count += 1
+                overview.message_count += ls.message_count
+                overview.tool_call_count += ls.user_turns
+                overview.input_tokens += ls.input_tokens
+                overview.output_tokens += ls.output_tokens
+                overview.cache_read_tokens += ls.cache_read_tokens
+                overview.cache_creation_tokens += ls.cache_creation_tokens
+                overview.estimated_cost_usd += estimate_session_cost(ls)
 
     def _get_live_pids(self) -> set[int]:
         return {s.pid for s in self._live_sessions if s.pid}
@@ -255,7 +285,7 @@ class AgenticMetricApp(App):
     def _update_live(self, sessions: list[LiveSession]) -> None:
         self._live_sessions = sessions
         overview = get_today_overview(self._db)
-        overview.session_count += self._count_live_only()
+        self._merge_live_into_overview(overview)
         self._populate_session_table()
         self.query_one("#today-summary", TodaySummary).update_data(
             overview, self._count_active()
