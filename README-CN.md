@@ -40,30 +40,6 @@
 >
 > ³ VS Code 仅支持进程级检测，无法匹配到具体的 Copilot Chat 会话。
 
-## 数据来源
-
-数据路径因平台而异，下表中 `$CONFIG` 和 `$DATA` 含义如下：
-
-| | Linux | macOS |
-|--|-------|-------|
-| `$CONFIG` | `~/.config` | `~/Library/Application Support` |
-| `$DATA` | `~/.local/share` | `~/Library/Application Support` |
-
-| Agent | 数据路径 | 采集内容 |
-|-------|---------|---------|
-| Claude Code | `~/.claude/projects/` | JSONL 会话、token 用量、模型、分支 |
-| Claude Code | `~/.claude/stats-cache.json` | 每日活动统计 |
-| Codex | `~/.codex/sessions/` | JSONL 会话、token 用量、模型 |
-| VS Code | `$CONFIG/Code/User/workspaceStorage/*/chatSessions/` | 聊天会话（JSON + JSONL）、token 用量（仅 JSONL）、模型 |
-| VS Code | `$CONFIG/Code/User/globalStorage/emptyWindowChatSessions/` | 未打开项目时的聊天会话 |
-| VS Code | 进程检测 | 运行状态、工作目录 |
-| OpenCode | `$DATA/opencode/opencode.db` | SQLite 会话、消息、token 用量、模型 |
-| OpenCode | 进程检测 | 运行状态、活跃会话匹配 |
-| Qwen Code | `~/.qwen/projects/*/chats/` | JSONL 会话、token 用量、模型、分支 |
-| Qwen Code | 进程检测 | 运行状态、工作目录 |
-
-所有数据汇总存储在 `$DATA/agentic_metric/data.db`（SQLite）。
-
 ## 安装
 
 ```bash
@@ -118,6 +94,30 @@ set updatetime=60000          " 空闲 60 秒后触发 CursorHold
 | `q` | 退出 |
 | `r` | 刷新数据 |
 | `Tab` | 切换 Dashboard / History 标签页 |
+
+## 数据来源
+
+数据路径因平台而异，下表中 `$CONFIG` 和 `$DATA` 含义如下：
+
+| | Linux | macOS |
+|--|-------|-------|
+| `$CONFIG` | `~/.config` | `~/Library/Application Support` |
+| `$DATA` | `~/.local/share` | `~/Library/Application Support` |
+
+| Agent | 数据路径 | 采集内容 |
+|-------|---------|---------|
+| Claude Code | `~/.claude/projects/` | JSONL 会话、token 用量、模型、分支 |
+| Claude Code | `~/.claude/stats-cache.json` | 每日活动统计 |
+| Codex | `~/.codex/sessions/` | JSONL 会话、token 用量、模型 |
+| VS Code | `$CONFIG/Code/User/workspaceStorage/*/chatSessions/` | 聊天会话（JSON + JSONL）、token 用量（仅 JSONL）、模型 |
+| VS Code | `$CONFIG/Code/User/globalStorage/emptyWindowChatSessions/` | 未打开项目时的聊天会话 |
+| VS Code | 进程检测 | 运行状态、工作目录 |
+| OpenCode | `$DATA/opencode/opencode.db` | SQLite 会话、消息、token 用量、模型 |
+| OpenCode | 进程检测 | 运行状态、活跃会话匹配 |
+| Qwen Code | `~/.qwen/projects/*/chats/` | JSONL 会话、token 用量、模型、分支 |
+| Qwen Code | 进程检测 | 运行状态、工作目录 |
+
+所有数据汇总存储在 `$DATA/agentic_metric/data.db`（SQLite）。
 
 ## 不支持的 Agent
 
