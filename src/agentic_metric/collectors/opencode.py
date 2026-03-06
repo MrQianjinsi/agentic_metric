@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import time
 from datetime import datetime, timezone
 
 from . import BaseCollector
 from ..config import OPENCODE_DB
 from ..models import LiveSession
 from ..pricing import estimate_cost
-from ._process import find_pids
+from ._process import get_running_cwds
+
+# Sessions updated more than this many seconds ago are not considered active.
+_ACTIVE_THRESHOLD_SECS = 1800  # 30 minutes
 
 
 def _ms_to_iso(ms: int | None) -> str:
@@ -28,10 +32,20 @@ class OpenCodeCollector(BaseCollector):
         return "opencode"
 
     def get_live_sessions(self) -> list[LiveSession]:
-        """Detect running opencode processes and return live sessions."""
-        pids = find_pids(".opencode", exact=False)
-        if not pids or not OPENCODE_DB.exists():
+        """Detect running opencode processes and return live sessions.
+
+        A session is considered active only when:
+        1. Its directory matches the CWD of a running opencode process.
+        2. It has been updated within the last 30 minutes.
+        """
+        pid_cwds = get_running_cwds(".opencode", exact=False)
+        if not pid_cwds or not OPENCODE_DB.exists():
             return []
+
+        # Build {cwd: pid} mapping for directory lookups
+        cwd_to_pid: dict[str, int] = {}
+        for pid, cwd in pid_cwds.items():
+            cwd_to_pid[cwd] = pid
 
         try:
             src = sqlite3.connect(
@@ -43,39 +57,38 @@ class OpenCodeCollector(BaseCollector):
         sessions: list[LiveSession] = []
         try:
             src.row_factory = sqlite3.Row
-            # Get the most recent non-archived session per directory
+            cutoff_ms = int((time.time() - _ACTIVE_THRESHOLD_SECS) * 1000)
             rows = src.execute(
                 """SELECT s.id, s.title, s.directory, s.time_created, s.time_updated
                    FROM session s
                    WHERE s.time_archived IS NULL
-                   ORDER BY s.time_updated DESC
-                   LIMIT 10"""
+                     AND s.time_updated >= ?
+                   ORDER BY s.time_updated DESC""",
+                (cutoff_ms,),
             ).fetchall()
 
             seen_dirs: set[str] = set()
             for row in rows:
                 directory = row["directory"] or ""
-                if directory in seen_dirs:
+                if not directory or directory in seen_dirs:
+                    continue
+
+                # Match session directory against running process CWDs
+                pid = cwd_to_pid.get(directory)
+                if pid is None:
                     continue
                 seen_dirs.add(directory)
 
-                # Get latest model and tokens from assistant messages
+                # Get latest model from assistant messages
                 msg = src.execute(
-                    """SELECT
-                           json_extract(data, '$.modelID') AS model,
-                           json_extract(data, '$.tokens.input') AS inp,
-                           json_extract(data, '$.tokens.output') AS outp,
-                           json_extract(data, '$.tokens.cache.read') AS cread,
-                           json_extract(data, '$.tokens.cache.write') AS cwrite
+                    """SELECT json_extract(data, '$.modelID') AS model
                        FROM message
                        WHERE session_id = ? AND json_extract(data, '$.role') = 'assistant'
                        ORDER BY time_created DESC LIMIT 1""",
                     (row["id"],),
                 ).fetchone()
 
-                model = ""
-                if msg:
-                    model = msg["model"] or ""
+                model = (msg["model"] or "") if msg else ""
 
                 # Count user turns and total messages
                 user_turns = src.execute(
@@ -88,7 +101,6 @@ class OpenCodeCollector(BaseCollector):
                 ).fetchone()[0]
 
                 # Aggregate tokens across all assistant messages
-                # reasoning tokens are billed as output, so add them together
                 agg = src.execute(
                     """SELECT
                            SUM(json_extract(data, '$.tokens.input')) AS inp,
@@ -130,7 +142,7 @@ class OpenCodeCollector(BaseCollector):
                     LiveSession(
                         session_id=f"opencode-{row['id']}",
                         agent_type="opencode",
-                        pid=pids[0],
+                        pid=pid,
                         project_path=directory,
                         model=model,
                         message_count=message_count,
