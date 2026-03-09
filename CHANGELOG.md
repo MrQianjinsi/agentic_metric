@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.8
+
+### Bug Fixes
+
+- **Fix multiple sessions in same directory only detecting one as active**: `cwd_to_pid` dict was overwriting duplicate CWDs; now tracks all PIDs per CWD and picks the corresponding number of recent JSONL files.
+- **Fix closed sessions incorrectly marked as active**: The agent-type fallback logic (designed for VS Code's PID-based session IDs) was triggering for Claude Code when a new session hadn't synced to DB yet, causing unrelated closed sessions to show a green active dot.
+
 ## v0.1.7
 
 ### New Features
