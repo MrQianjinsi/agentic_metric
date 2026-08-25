@@ -24,7 +24,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     ended_at TEXT,
     first_prompt TEXT DEFAULT '',
     last_prompt TEXT DEFAULT '',
-    summary TEXT DEFAULT ''
+    summary TEXT DEFAULT '',
+    parent_session_id TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS sync_state (
@@ -52,6 +53,12 @@ class Database:
         if "last_prompt" not in cols:
             self._conn.execute(
                 "ALTER TABLE sessions ADD COLUMN last_prompt TEXT DEFAULT ''"
+            )
+        if "parent_session_id" not in cols:
+            # Subagent rows point at the session that dispatched them.
+            # Empty for ordinary top-level sessions.
+            self._conn.execute(
+                "ALTER TABLE sessions ADD COLUMN parent_session_id TEXT DEFAULT ''"
             )
 
     def close(self) -> None:
@@ -98,6 +105,7 @@ class Database:
         ended_at: str = "",
         first_prompt: str = "",
         last_prompt: str = "",
+        parent_session_id: str = "",
         summary: str = "",
     ) -> None:
         self._conn.execute(
@@ -105,8 +113,9 @@ class Database:
                    (session_id, agent_type, project_path, git_branch, model,
                     message_count, user_turns, input_tokens, output_tokens,
                     cache_read_tokens, cache_creation_tokens, estimated_cost_usd,
-                    started_at, ended_at, first_prompt, last_prompt, summary)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    started_at, ended_at, first_prompt, last_prompt, summary,
+                    parent_session_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(session_id) DO UPDATE SET
                    message_count = CASE WHEN excluded.message_count > 0 THEN excluded.message_count ELSE sessions.message_count END,
                    user_turns = CASE WHEN excluded.user_turns > 0 THEN excluded.user_turns ELSE sessions.user_turns END,
@@ -120,13 +129,15 @@ class Database:
                    last_prompt = CASE WHEN excluded.last_prompt != '' THEN excluded.last_prompt ELSE sessions.last_prompt END,
                    summary = CASE WHEN excluded.summary != '' THEN excluded.summary ELSE sessions.summary END,
                    model = CASE WHEN excluded.model != '' THEN excluded.model ELSE sessions.model END,
-                   project_path = CASE WHEN excluded.project_path != '' THEN excluded.project_path ELSE sessions.project_path END
+                   project_path = CASE WHEN excluded.project_path != '' THEN excluded.project_path ELSE sessions.project_path END,
+                   parent_session_id = CASE WHEN excluded.parent_session_id != '' THEN excluded.parent_session_id ELSE sessions.parent_session_id END
             """,
             (
                 session_id, agent_type, project_path, git_branch, model,
                 message_count, user_turns, input_tokens, output_tokens,
                 cache_read_tokens, cache_creation_tokens, estimated_cost_usd,
                 started_at, ended_at, first_prompt, last_prompt, summary,
+                parent_session_id,
             ),
         )
 

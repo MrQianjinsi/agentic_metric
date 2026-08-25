@@ -251,21 +251,79 @@ def get_model_breakdown(db: Database, days: int = 30) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def _short_model(model: str) -> str:
+    """Drop a trailing date stamp so models fit a table cell."""
+    return (model or "").split("-20")[0]
+
+
 def get_today_sessions(db: Database) -> list[dict]:
-    """Get all sessions from today, ordered by started_at descending."""
+    """Get all sessions from today, ordered by started_at descending.
+
+    Subagent rows are folded into the session that dispatched them rather than
+    listed separately: a session with five subagents would otherwise push five
+    extra rows into the table. The parent row's tokens and cost therefore cover
+    the whole session tree, and `model` names every model that ran in it
+    (e.g. "opus-5 +5x sonnet-5"). Subagents whose parent is not itself in
+    today's rows are kept as their own rows so their cost is never dropped.
+    """
     today = datetime.now().strftime("%Y-%m-%d")
     rows = db.conn.execute(
         """SELECT session_id, agent_type, project_path, git_branch, model,
                   message_count, user_turns, input_tokens, output_tokens,
                   cache_read_tokens, cache_creation_tokens, estimated_cost_usd,
-                  started_at, ended_at, first_prompt, last_prompt
+                  started_at, ended_at, first_prompt, last_prompt,
+                  parent_session_id
            FROM sessions
            WHERE date(started_at) = ?
            ORDER BY started_at DESC
         """,
         (today,),
     ).fetchall()
-    return [dict(r) for r in rows]
+    sessions = [dict(r) for r in rows]
+
+    by_id = {s["session_id"]: s for s in sessions}
+    children: dict[str, list[dict]] = {}
+    for s in sessions:
+        parent = s.get("parent_session_id") or ""
+        if parent and parent in by_id:
+            children.setdefault(parent, []).append(s)
+
+    folded: list[dict] = []
+    for s in sessions:
+        parent = s.get("parent_session_id") or ""
+        if parent and parent in by_id:
+            continue  # folded into its parent below
+        kids = children.get(s["session_id"])
+        if kids:
+            for key in ("message_count", "user_turns", "input_tokens",
+                        "output_tokens", "cache_read_tokens",
+                        "cache_creation_tokens"):
+                s[key] = (s[key] or 0) + sum(k[key] or 0 for k in kids)
+            s["estimated_cost_usd"] = (s["estimated_cost_usd"] or 0) + sum(
+                k["estimated_cost_usd"] or 0 for k in kids
+            )
+            counts: dict[str, int] = {}
+            for k in kids:
+                m = _short_model(k["model"])
+                if m:
+                    counts[m] = counts.get(m, 0) + 1
+            own = _short_model(s["model"])
+            # Never drop a subagent from the label. A subagent running the SAME
+            # model as its parent still costs money and still means the session
+            # was a team -- filtering it out would render such a session
+            # indistinguishable from a solo one.
+            if counts and set(counts) == {own}:
+                # every subagent used the parent's model: "opus-5 +3"
+                s["model"] = f"{own} +{counts[own]}"
+            elif counts:
+                parts = [
+                    m if n == 1 else f"{n}x {m}"
+                    for m, n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+                ]
+                s["model"] = f"{own} +" + " +".join(parts)
+            s["subagent_count"] = len(kids)
+        folded.append(s)
+    return folded
 
 
 def get_top_projects(db: Database, limit: int = 10) -> list[dict]:
