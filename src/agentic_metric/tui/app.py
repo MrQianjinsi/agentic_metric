@@ -278,8 +278,17 @@ class AgenticMetricApp(App):
 
         token_vals = [t / divisor for t in raw_tokens]
 
-        plt.plot(xs, token_vals, label=f"Tokens ({unit})", marker="braille")
-        plt.plot(xs, cost_vals, label="Cost ($)", marker="braille")
+        # Two y-axes, because the series are unrelated quantities: on a real
+        # month tokens ran 0.01-2.13 (B) while cost ran 10-1035 ($). Sharing one
+        # axis flattened the token line onto the baseline, so the legend claimed
+        # two series while only one was readable, and neither matched the table
+        # below (which prints the raw values).
+        plt.plot(xs, token_vals, label=f"Tokens ({unit})",
+                 marker="braille", yside="left")
+        plt.plot(xs, cost_vals, label="Cost ($)",
+                 marker="braille", yside="right")
+        plt.ylabel(f"Tokens ({unit})" if unit else "Tokens", yside="left")
+        plt.ylabel("Cost ($)", yside="right")
         plt.xticks(xs, dates)
         plt.xlabel("Date")
         plot_widget.refresh()
