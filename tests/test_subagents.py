@@ -6,8 +6,9 @@ parent transcript and carry the PARENT's ``sessionId`` in every entry, which is
 what makes them easy to collect wrongly:
 
 * a non-recursive glob misses them entirely, and
-* keying a row on the ``sessionId`` inside them makes every subagent of a
-  session overwrite both each other and the parent row.
+* keying a row on the ``sessionId`` inside them would collapse every subagent of
+  a session, and the parent, into a single row -- so the row key has to stay the
+  file stem, and the parent link has to be read separately.
 """
 
 import json
@@ -235,4 +236,48 @@ def test_session_without_subagents_is_unchanged():
     assert row["model"] == "claude-opus-5"
     assert row["output_tokens"] == 100
     assert "subagent_count" not in row
+    db.close()
+
+
+# ── per-model breakdown ───────────────────────────────────────────────────
+
+
+def test_model_breakdown_counts_subagents():
+    """Subagents must appear in the per-model totals, not just the parent."""
+    from agentic_metric.store.aggregator import get_model_breakdown
+
+    db = _make_db()
+    _seed(db, "claude-opus-5", ["claude-sonnet-5", "claude-sonnet-5"])
+    rows = {r["model"]: r for r in get_model_breakdown(db)}
+
+    assert set(rows) == {"claude-opus-5", "claude-sonnet-5"}
+    assert rows["claude-sonnet-5"]["session_count"] == 2
+    assert rows["claude-sonnet-5"]["subagent_count"] == 2
+    assert rows["claude-sonnet-5"]["output_tokens"] == 20
+    assert rows["claude-opus-5"]["subagent_count"] == 0
+    db.close()
+
+
+def test_model_breakdown_orders_by_cost():
+    from agentic_metric.store.aggregator import get_model_breakdown
+
+    db = _make_db()
+    db.upsert_session("cheap", "claude_code", model="claude-haiku-4-5",
+                      estimated_cost_usd=0.1, started_at=_today())
+    db.upsert_session("dear", "claude_code", model="claude-opus-5",
+                      estimated_cost_usd=9.0, started_at=_today())
+    db.commit()
+    assert [r["model"] for r in get_model_breakdown(db)] == [
+        "claude-opus-5", "claude-haiku-4-5"]
+    db.close()
+
+
+def test_model_breakdown_skips_rows_without_a_model():
+    from agentic_metric.store.aggregator import get_model_breakdown
+
+    db = _make_db()
+    db.upsert_session("nomodel", "claude_code", model="",
+                      estimated_cost_usd=1.0, started_at=_today())
+    db.commit()
+    assert get_model_breakdown(db) == []
     db.close()

@@ -326,6 +326,34 @@ def get_today_sessions(db: Database) -> list[dict]:
     return folded
 
 
+def get_model_breakdown(db: Database, date: str | None = None) -> list[dict]:
+    """Per-model totals for one day, biggest cost first.
+
+    Counts every row, subagents included -- the point of this view is to answer
+    "where did the money go" for a session tree that used several models, which
+    the per-session label can only hint at.
+    """
+    day = date or datetime.now().strftime("%Y-%m-%d")
+    rows = db.conn.execute(
+        """SELECT model,
+                  COUNT(*) AS session_count,
+                  SUM(input_tokens) AS input_tokens,
+                  SUM(output_tokens) AS output_tokens,
+                  SUM(cache_read_tokens) AS cache_read_tokens,
+                  SUM(cache_creation_tokens) AS cache_creation_tokens,
+                  SUM(estimated_cost_usd) AS cost,
+                  SUM(CASE WHEN parent_session_id != '' THEN 1 ELSE 0 END)
+                      AS subagent_count
+           FROM sessions
+           WHERE date(started_at) = ? AND model != ''
+           GROUP BY model
+           ORDER BY cost DESC
+        """,
+        (day,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def get_top_projects(db: Database, limit: int = 10) -> list[dict]:
     """Get top projects by message count."""
     rows = db.conn.execute(
