@@ -111,10 +111,13 @@ def test_daily_trends():
 
     trends = get_daily_trends(db, days=365 * 10)
     assert len(trends) == 2
-    assert trends[0].date == "2025-01-01"
-    assert trends[0].session_count == 1
-    assert trends[0].input_tokens == 10000
-    assert trends[1].date == "2025-01-02"
-    assert trends[1].session_count == 2
-    assert trends[1].input_tokens == 25000
+    # Newest first: the query is ORDER BY date DESC, and both consumers rely on
+    # it -- the table shows the latest day at the top, and the chart calls
+    # reversed() to plot oldest-to-newest.
+    assert trends[0].date == "2025-01-02"
+    assert trends[0].session_count == 2
+    assert trends[1].date == "2025-01-01"
+    assert trends[1].session_count == 1
+    assert trends[1].input_tokens == 10000
+    assert trends[0].input_tokens == 25000  # 20000 + 5000 across two agents
     db.close()
