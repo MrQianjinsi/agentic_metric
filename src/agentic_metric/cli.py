@@ -114,6 +114,7 @@ def today() -> None:
 
     overview = aggregator.get_today_overview(db)
     today_sessions = aggregator.get_today_sessions(db)
+    by_model = aggregator.get_model_breakdown(db)
     live_sessions = registry.get_live_sessions()
     aggregator.merge_live_into_overview(overview, live_sessions, today_sessions)
     overview.active_agents = sum(
@@ -154,6 +155,29 @@ def today() -> None:
     )
 
     console.print(table)
+
+    if by_model:
+        mt = Table(title="By model")
+        mt.add_column("Model", style="cyan")
+        mt.add_column("Sessions", justify="right")
+        mt.add_column("of which sub", justify="right", style="dim")
+        mt.add_column("Tokens", justify="right")
+        mt.add_column("Cost", justify="right", style="yellow")
+        for m in by_model:
+            total_tokens = (
+                (m["input_tokens"] or 0)
+                + (m["output_tokens"] or 0)
+                + (m["cache_read_tokens"] or 0)
+                + (m["cache_creation_tokens"] or 0)
+            )
+            mt.add_row(
+                m["model"],
+                str(m["session_count"]),
+                str(m["subagent_count"]) if m["subagent_count"] else "-",
+                _fmt_tokens(total_tokens),
+                f"${m['cost'] or 0:.2f}",
+            )
+        console.print(mt)
 
 
 @app.command()

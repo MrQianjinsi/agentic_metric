@@ -346,6 +346,29 @@ class _LiveMonitor:
             pass
         return ""
 
+    @staticmethod
+    def _read_session_id(jsonl_file: Path) -> str:
+        """Extract the sessionId field from the first few lines of a JSONL file.
+
+        For a subagent transcript this is the id of the session that dispatched
+        it -- subagent entries carry the PARENT's sessionId, not one of their own.
+        """
+        try:
+            with open(jsonl_file) as f:
+                for i, line in enumerate(f):
+                    if i > 10:
+                        break
+                    try:
+                        entry = json.loads(line)
+                        sid = entry.get("sessionId", "")
+                        if sid:
+                            return sid
+                    except json.JSONDecodeError:
+                        continue
+        except OSError:
+            pass
+        return ""
+
 
 # ── Collector implementation ─────────────────────────────────────────────
 
@@ -429,7 +452,14 @@ class ClaudeCodeCollector(BaseCollector):
                 continue
 
             try:
+                # Top-level files are the ordinary sessions. Subagent (Task tool)
+                # transcripts live one level deeper, in
+                #   <project>/<session-id>/subagents/*.jsonl
+                # and are separate files -- their turns are NOT inlined into the
+                # parent transcript, so a non-recursive glob misses their tokens
+                # entirely.
                 jsonl_files = list(project_dir.glob("*.jsonl"))
+                jsonl_files += list(project_dir.glob("*/subagents/*.jsonl"))
             except OSError:
                 continue
 
@@ -469,8 +499,25 @@ class ClaudeCodeCollector(BaseCollector):
                 real_cwd = _LiveMonitor._read_cwd(jsonl_file)
                 project_path = real_cwd if real_cwd else str(project_dir)
 
+                # A subagent transcript carries the PARENT's sessionId in every
+                # entry, so that value must NOT become the row key: all of a
+                # session's subagents, and the parent, would collapse into one
+                # row. The file stem (e.g. "agent-<name>-<hash>") is the unique
+                # id -- which is what _SessionAccum already derives, so this is
+                # stated explicitly only to keep the intent obvious next to the
+                # parent lookup below.
+                if jsonl_file.parent.name == "subagents":
+                    session_id = jsonl_file.stem
+                    # NOT accum.session_id -- that is derived from the file name
+                    # (see _SessionAccum.__init__), which for a subagent is the
+                    # subagent's own id. The parent's id is in the entries.
+                    parent_session_id = _LiveMonitor._read_session_id(jsonl_file)
+                else:
+                    session_id = accum.session_id
+                    parent_session_id = ""
+
                 db.upsert_session(
-                    accum.session_id,
+                    session_id,
                     self.agent_type,
                     project_path=project_path,
                     git_branch=accum.git_branch,
@@ -486,6 +533,7 @@ class ClaudeCodeCollector(BaseCollector):
                     ended_at=accum.last_ts,
                     first_prompt=accum.first_prompt,
                     last_prompt=accum.last_prompt,
+                    parent_session_id=parent_session_id,
                 )
 
                 db.set_sync_state(sync_key, str(file_size))

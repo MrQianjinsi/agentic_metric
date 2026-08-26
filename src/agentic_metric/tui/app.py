@@ -11,7 +11,7 @@ from ..collectors import CollectorRegistry, create_default_registry
 from ..config import DATA_SYNC_INTERVAL, LIVE_REFRESH_INTERVAL
 from ..models import DailyTrend, LiveSession
 from ..pricing import estimate_cost, estimate_session_cost
-from ..store.aggregator import get_daily_trends, get_today_overview, get_today_sessions, merge_live_into_overview, merge_live_into_trends
+from ..store.aggregator import get_daily_trends, get_model_breakdown, get_today_overview, get_today_sessions, merge_live_into_overview, merge_live_into_trends
 from ..store.database import Database
 from .widgets import TodaySummary, fmt_cost, fmt_tokens, ts_to_local
 
@@ -31,6 +31,7 @@ class AgenticMetricApp(App):
     BINDINGS = [
         Binding("q", "quit", "Quit"),
         Binding("r", "refresh_data", "Refresh"),
+        Binding("t", "toggle_theme", "Light/Dark"),
     ]
 
     def __init__(self) -> None:
@@ -46,10 +47,12 @@ class AgenticMetricApp(App):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        with TabbedContent("Today", "History"):
+        with TabbedContent("Today", "Models", "History"):
             with TabPane("Today", id="tab-dashboard"):
                 yield TodaySummary(id="today-summary")
                 yield DataTable(id="live-table")
+            with TabPane("Models", id="tab-models"):
+                yield DataTable(id="model-table")
             with TabPane("History", id="tab-history"):
                 yield PlotextPlot(id="trend-chart")
                 yield DataTable(id="daily-table")
@@ -57,6 +60,7 @@ class AgenticMetricApp(App):
 
     def on_mount(self) -> None:
         self._populate_dashboard()
+        self._populate_models()
         self._populate_history()
         self.set_interval(LIVE_REFRESH_INTERVAL, self._tick_live)
         self.set_interval(DATA_SYNC_INTERVAL, self._auto_sync)
@@ -197,6 +201,46 @@ class AgenticMetricApp(App):
         for row in finished_rows:
             table.add_row(*row)
 
+    # ── Models ────────────────────────────────────────────────────────
+
+    def _populate_models(self) -> None:
+        """Per-model totals for today, biggest cost first.
+
+        The session table's model cell can only hint at a mixed session
+        ("opus-5 +3x sonnet-5"); this answers where the day's cost actually went.
+        """
+        table = self.query_one("#model-table", DataTable)
+        table.clear(columns=True)
+        table.add_columns("Model", "Sessions", "Sub", "Tokens", "Cost")
+
+        rows = get_model_breakdown(self._db)
+        if not rows:
+            table.add_row("[dim]no sessions today[/dim]", "", "", "", "")
+            return
+
+        total_sessions = total_tokens = 0
+        total_cost = 0.0
+        for r in rows:
+            tokens = (
+                (r["input_tokens"] or 0) + (r["output_tokens"] or 0)
+                + (r["cache_read_tokens"] or 0) + (r["cache_creation_tokens"] or 0)
+            )
+            total_sessions += r["session_count"]
+            total_tokens += tokens
+            total_cost += r["cost"] or 0
+            table.add_row(
+                r["model"],
+                str(r["session_count"]),
+                str(r["subagent_count"]) if r["subagent_count"] else "[dim]-[/dim]",
+                fmt_tokens(tokens),
+                fmt_cost(r["cost"] or 0),
+            )
+        table.add_row(
+            "[bold]Total[/bold]", f"[bold]{total_sessions}[/bold]", "",
+            f"[bold]{fmt_tokens(total_tokens)}[/bold]",
+            f"[bold]{fmt_cost(total_cost)}[/bold]",
+        )
+
     # ── History ───────────────────────────────────────────────────────
 
     def _populate_history(self) -> None:
@@ -235,8 +279,22 @@ class AgenticMetricApp(App):
 
         token_vals = [t / divisor for t in raw_tokens]
 
-        plt.plot(xs, token_vals, label=f"Tokens ({unit})", marker="braille")
-        plt.plot(xs, cost_vals, label="Cost ($)", marker="braille")
+        # Two y-axes, because the series are unrelated quantities: on a real
+        # month tokens ran 0.01-2.13 (B) while cost ran 10-1035 ($). Sharing one
+        # axis flattened the token line onto the baseline, so the legend claimed
+        # two series while only one was readable, and neither matched the table
+        # below (which prints the raw values).
+        # Colour and marker are set explicitly rather than left to plotext's
+        # per-series defaults, which picked two hues that read as the same
+        # colour on a dark terminal. The two series track each other closely
+        # (cost is derived from tokens), so where they overlap the marker shape
+        # is what separates them.
+        plt.plot(xs, token_vals, label=f"Tokens ({unit})",
+                 marker="braille", color="blue", yside="left")
+        plt.plot(xs, cost_vals, label="Cost ($)",
+                 marker="dot", color="orange", yside="right")
+        plt.ylabel(f"Tokens ({unit})" if unit else "Tokens", yside="left")
+        plt.ylabel("Cost ($)", yside="right")
         plt.xticks(xs, dates)
         plt.xlabel("Date")
         plot_widget.refresh()
@@ -292,14 +350,28 @@ class AgenticMetricApp(App):
     def _refresh_all(self) -> None:
         self._today_sessions = get_today_sessions(self._db)
         self._populate_dashboard()
+        self._populate_models()
         self._populate_history()
 
     # ── Actions ───────────────────────────────────────────────────────
+
+    def action_toggle_theme(self) -> None:
+        """Switch between the light and dark palettes.
+
+        PlotextPlot defaults to `theme="auto"` and re-registers a plotext theme
+        derived from the app theme, so the chart follows on its own. The redraw
+        is here because the already-rendered cells are not regenerated by the
+        theme switch alone.
+        """
+        self.theme = ("textual-light" if self.theme == "textual-dark"
+                      else "textual-dark")
+        self._populate_history()
 
     def action_refresh_data(self) -> None:
         self._collectors.sync_all(self._db)
         self._db.commit()
         self._populate_dashboard()
+        self._populate_models()
         self._populate_history()
         self.notify("Data refreshed")
 
